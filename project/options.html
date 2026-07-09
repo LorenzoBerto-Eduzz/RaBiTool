@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RaBiTool - Configuracoes</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2360a5fa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .container { width: 100%; max-width: 620px; }
+    .header { margin-bottom: 28px; }
+    .header-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .header-title-row .switch { margin-top: 5px; }
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 0;
+    }
+    .header p { font-size: 13px; color: #64748b; }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 18px;
+    }
+    .card h2 {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 16px;
+    }
+    .switch { position: relative; width: 58px; height: 28px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: #7f1d1d;
+      border-radius: 24px;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .slider::before {
+      content: 'off';
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #ef4444;
+      color: #0f172a;
+      left: 2px;
+      top: 2px;
+      transition: transform .2s, background .2s;
+      display: grid;
+      place-items: center;
+      font-size: 8.5px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: 0;
+      text-transform: lowercase;
+    }
+    .switch input:checked + .slider { background: #14532d; }
+    .switch input:checked + .slider::before {
+      content: 'on';
+      background: #22c55e;
+      transform: translateX(30px);
+    }
+    .switch:not(.is-ready) .slider { background: transparent !important; }
+    .switch:not(.is-ready) .slider::before {
+      content: '' !important;
+      background: transparent !important;
+      transform: none !important;
+    }
+    .no-toggle-anim .slider,
+    .no-toggle-anim .slider::before { transition: none !important; }
+    .sc-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      gap: 12px;
+    }
+    .sc-row:last-child { border-bottom: none; }
+    .sc-name { font-size: 13px; color: #cbd5e1; }
+    .sc-keys {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+      justify-content: flex-end;
+      flex-shrink: 0;
+    }
+    kbd {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 5px;
+      padding: 3px 8px;
+      height: 23px;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      font-size: 11px;
+      font-family: monospace;
+      color: #e2e8f0;
+      white-space: nowrap;
+      line-height: 1;
+    }
+    .sc-add-warning {
+      display: inline-flex;
+      width: 13px;
+      height: 13px;
+      color: #facc15;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      line-height: 0;
+      margin-top: -3px;
+    }
+    .sc-add-warning svg {
+      display: block;
+      width: 13px;
+      height: 13px;
+      fill: currentColor;
+    }
+    .sc-key-btn {
+      background: transparent;
+      border: 0;
+      border-radius: 7px;
+      padding: 2px;
+      margin: -2px;
+      color: #e2e8f0;
+      min-height: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      cursor: pointer;
+      font-family: inherit;
+      line-height: 1;
+      transition: color .15s, outline-color .15s;
+      outline: 1px solid transparent;
+      outline-offset: 1px;
+    }
+    .sc-key-btn:hover,
+    .sc-key-btn.is-capturing {
+      outline-color: #e2e8f0;
+      color: #93c5fd;
+    }
+    .sc-key-btn.is-empty {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 5px;
+      color: #60a5fa;
+      font-size: 11px;
+      font-family: monospace;
+      min-height: 23px;
+      padding: 3px 8px;
+      margin: 0;
+    }
+    .sc-add-label {
+      font: inherit;
+      line-height: 1;
+    }
+    .plus {
+      font-size: 11px;
+      color: #e2e8f0;
+      font-weight: 700;
+    }
+    .is-hidden { display: none !important; }
+    .support-grid {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 10px 14px;
+      align-items: baseline;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+    .support-label {
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    .support-value { color: #cbd5e1; }
+    .support-value a {
+      color: #93c5fd;
+      text-decoration: underline;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body class="no-toggle-anim">
+  <main class="container">
+    <div class="header">
+      <div class="header-title-row">
+        <h1>RaBiTool</h1>
+        <label class="switch">
+          <input type="checkbox" id="toggle-enabled">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <p>Automacao web para levar exportacoes XLSX do Reclame Aqui para a planilha mae no Excel.</p>
+    </div>
+
+    <section class="card">
+      <h2>Fluxo</h2>
+      <div class="support-grid">
+        <div class="support-label">Origem:</div>
+        <div class="support-value">Reclame Aqui, via navegacao e download XLSX</div>
+        <div class="support-label">Destino:</div>
+        <div class="support-value">Excel Web, via interacao de interface</div>
+        <div class="support-label">Metodo:</div>
+        <div class="support-value">Automacao de abas, botoes, espera de pagina e importacao/colagem</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Atalhos de Teclado</h2>
+      <div id="sc-list">
+        <div class="sc-row">
+          <span class="sc-name">Ativar / Desativar</span>
+          <span class="sc-keys" id="sc-toggle"></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="version-card" class="card is-hidden" aria-hidden="true">
+      <h2>Versao</h2>
+      <p>Version/update UI is scaffolded and hidden until configured.</p>
+    </section>
+
+    <section class="card">
+      <h2>Suporte</h2>
+      <div class="support-grid">
+        <div class="support-label">Github:</div>
+        <div class="support-value" id="support-github">Configure apos criar o remoto do projeto</div>
+        <div class="support-label">Email:</div>
+        <div class="support-value">Configure quando houver canal de suporte</div>
+      </div>
+    </section>
+  </main>
+  <script src="popup_ui.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

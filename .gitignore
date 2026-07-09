@@ -1,0 +1,25 @@
+# Generated release exports
+*.zip
+Chrome_Extension_AI_Template/
+*/Chrome_Extension_AI_Template/
+ExtensionTemplateRelease/
+*/ExtensionTemplateRelease/
+
+# Local/private material
+.git-identity
+local_assets/
+local_data/
+private_data/
+*.local
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs/cache
+*.log
+.cache/

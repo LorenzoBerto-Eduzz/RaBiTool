@@ -1,0 +1,10 @@
+importScripts(
+  'background/config.js',
+  'background/settings.js',
+  'background/clipboard.js',
+  'background/chrome_tabs.js',
+  'background/reclame_aqui.js',
+  'background/excel_sheet.js',
+  'background/ra_bi_workflow.js',
+  'background/runtime.js'
+);
