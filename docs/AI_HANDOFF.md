@@ -24,7 +24,7 @@ This file is the portable continuity note for AI coding sessions working on RaBi
 
 RaBiTool automates a Reclame Aqui to Excel BI workflow.
 
-The intended flow is:
+The owner is still aligning exact behavior. The current broad understanding is:
 
 1. Use the Reclame Aqui web UI in Chrome.
 2. Select filters/actions specified by the owner.
@@ -35,6 +35,15 @@ The intended flow is:
 
 A separate downstream BI app reads the mother sheet later. That downstream app is out of scope for this extension.
 
+## Core Data Model
+
+RaBiTool handles two separate spreadsheet objects:
+
+- Incoming report: a newly downloaded RA/HugMe XLSX export. It is raw source data, has many columns, and may include export/title rows before the real header.
+- Mother sheet: the large Excel Web destination used by BI. It has the clean target layout and many historical rows.
+
+The private sample workbook previously inspected placed the mother-sheet snippet in `Sheet1` and the report sample in `Sheet2`, but production should be treated as a fresh report plus the real Excel Web workbook.
+
 ## Key Alignment
 
 - Workflow style: browser UI automation.
@@ -42,13 +51,27 @@ A separate downstream BI app reads the mother sheet later. That downstream app i
 - Destination: Excel Web.
 - Source: Reclame Aqui export/download page.
 - The first implementation should be driven by exact owner-provided page steps, selectors, filters, and destination placement rules.
+- Treat this as business-critical data automation. It must fail closed with clear reasons instead of guessing.
+- Use modular stages: RA controller, report intake, XLSX parser, reconciliation engine, Excel writer, and safety/reporting layer.
+- Owner confirmed `Id HugMe` is the unique ticket/case identity key and the first mother-sheet column.
+- Current time/order key is `Data Reclamação`.
+- Current mother-sheet output contract is exactly 9 columns: `Id HugMe`, `Data Reclamação`, `Tags`, `Seu problema foi resolvido?`, `Voltaria a fazer negócio?`, `Nota`, `Tempo primeira resposta (público)`, `Atribuido Para`, and `Tipo de Cliente`.
+- The incoming report is authoritative for those mapped columns. Blank mapped report values should overwrite existing mother-sheet values.
+- Both report and mother sheet must be sorted ascending by `Data Reclamação`; if not, the tool should block before writing.
+- First reconciliation strategy: find the oldest incoming report ticket in the mother sheet, validate the overlap through the current most recent mother-sheet ticket, then replace from the oldest matching mother-sheet row downward with normalized report rows.
+- Safety rule: if overlap row counts between mother sheet and report do not match, stop and show an error rather than writing.
+- Append-only rule: if the oldest report ticket is not found in the mother sheet, append at the end only when the report is clearly newer than the current mother-sheet tail.
+- Once all guards pass, owner prefers the workflow to proceed automatically/quickly rather than requiring extra confirmation.
+- Owner prefers development to move toward the real RA report generation/download flow early, while keeping parser/reconciliation modular and testable.
 - Real customer data, IDs, screenshots, exports, and workbook details must stay out of Git.
 
 ## Runtime Baseline
 
 - Floating popup is injected into supported pages.
-- Popup contains drag, gear, close, `Atualizar BI`, `RA`, `Excel`, and status text.
-- Popup buttons send stable workflow actions:
+- Current visible popup shell contains drag, gear, close, separator, and empty body.
+- Current visual direction: white popup, gray icons/separator, green/light-green hover for icons.
+- Workflow buttons are intentionally hidden until button behavior is aligned.
+- Stable workflow action names already exist for future popup buttons:
   - `RABITOOL_START_RA_TO_EXCEL`
   - `RABITOOL_PREPARE_RA_EXPORT`
   - `RABITOOL_PREPARE_EXCEL_IMPORT`
@@ -88,17 +111,15 @@ Keep this broad only while discovering. Before release, narrow host permissions 
 
 ## Next Required Alignments
 
-Before implementing the real workflow, ask the owner for:
+Before implementing the real workflow, align with the owner in this order:
 
-1. Exact Reclame Aqui URL/page.
-2. Step-by-step RA filter/action/download sequence.
-3. Expected downloaded XLSX columns and example structure using fake data.
-4. Excel Web workbook URL.
-5. Worksheet/tab name.
-6. Starting cell/range.
-7. Whether to replace a range, clear and rebuild a tab, or append rows.
-8. Row mapping rules from RA export columns to Excel columns.
-9. Success/error status wording the owner wants in the popup.
+1. Data contract: required report headers, target mother-sheet headers, data types, optional fields, and validation rules.
+2. Reconciliation behavior: refine edge cases around missing oldest report ticket, missing current most recent mother-sheet ticket, sorting validation, append-only behavior, and confirmation before write.
+3. Safety gates: what blocks execution versus what only warns.
+4. Report intake method: direct capture/fetch of the downloaded XLSX versus file-picker fallback.
+5. Excel Web write method: workbook/tab/range, paste/import strategy, and validation after writing.
+6. Exact RA page automation: URL, filters, buttons, processing state, reload/check behavior, and download trigger.
+7. Popup/meta workflow: statuses, confirmations, keybinds, tab checks, and recovery flows.
 
 ## First Commit Gate
 

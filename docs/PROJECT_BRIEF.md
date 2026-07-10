@@ -14,6 +14,8 @@ RaBiTool automates the operational bridge between Reclame Aqui exports and an Ex
 
 The owner wants a Chrome extension that can operate through normal browser pages: click buttons, wait for pages, trigger or detect an XLSX download from Reclame Aqui, and then bring that data into a specific Excel sheet in the required row structure.
 
+The project should be developed as a reliable business-data workflow, not as a loose page-click macro. Correctness, validation, clear failure states, and modularity matter more than rushing to automate every click.
+
 ## Product Direction
 
 - Source system: Reclame Aqui.
@@ -23,6 +25,12 @@ The owner wants a Chrome extension that can operate through normal browser pages
 - API/OAuth integrations: out of scope for the initial approach.
 - Downstream BI app: out of scope; it consumes the mother sheet later.
 
+## Core Objects
+
+- Incoming report: the fresh RA/HugMe XLSX file produced by the export flow.
+- Mother sheet: the large Excel Web BI input sheet that must be updated carefully.
+- Parser/reconciliation layer: the business logic that maps report rows into the mother-sheet shape and decides what to update, insert, or leave untouched.
+
 ## Initial Scope
 
 - Project identity and settings renamed to RaBiTool.
@@ -31,6 +39,8 @@ The owner wants a Chrome extension that can operate through normal browser pages
 - RA export and Excel import modules exist as scaffolds.
 - Downloads, offscreen clipboard, tabs, scripting, and commands are available for the prototype.
 - Broad host permissions remain during discovery.
+- Durable docs capture the current two-spreadsheet model and alignment-first development plan.
+- Popup visual baseline is a clean white shell with gray controls and green hover.
 
 ## Out Of Scope For Now
 
@@ -46,6 +56,10 @@ The owner wants a Chrome extension that can operate through normal browser pages
 - Use fake examples in docs and tests.
 - Prefer modular workflow helpers over large hidden timing assumptions.
 - Treat web UI automation as inherently fragile; document selectors and page assumptions when implemented.
+- Fail closed when business data validation is uncertain.
+- Prefer header-name mapping and explicit validation over fixed column positions.
+- Avoid touching unrelated mother-sheet rows outside the affected time span.
+- After validation guards pass, optimize for quick/automatic execution.
 
 ## Owner Workflow Commands
 

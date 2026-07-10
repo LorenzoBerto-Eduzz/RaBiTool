@@ -29,28 +29,21 @@
         </button>
       </div>
     </div>
-    <div class="csh-body" aria-live="polite">
-      <div class="csh-action-grid">
-        <button class="csh-primary-action" id="csh-btn-run" type="button">Atualizar BI</button>
-        <button class="csh-secondary-action" id="csh-btn-ra" type="button">RA</button>
-        <button class="csh-secondary-action" id="csh-btn-excel" type="button">Excel</button>
-      </div>
-      <div class="csh-status" id="csh-status">Pronto para configurar o fluxo RA -> Excel.</div>
-    </div>
+    <div class="csh-body" aria-live="polite"></div>
   `;
 
   const STYLE = `
     #rabi-tool-popup {
       position: fixed;
       width: 356px;
-      min-height: 94px;
-      background: #111827;
-      color: #f9fafb;
+      min-height: 42px;
+      background: #ffffff;
+      color: #374151;
       border-radius: 10px;
       font-size: 13px;
       font-family: 'SF Mono','Consolas','Menlo',monospace;
       z-index: 2147483647;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+      box-shadow: 0 8px 28px rgba(15,23,42,0.18);
       padding: 6px 10px 8px;
       display: flex;
       flex-direction: column;
@@ -65,53 +58,10 @@
       justify-content: space-between;
       min-height: 22px;
       padding-bottom: 4px;
-      border-bottom: 1px solid rgba(255,255,255,0.07);
+      border-bottom: 1px solid #d1d5db;
     }
     .csh-body {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      padding-top: 8px;
-      min-height: 48px;
-    }
-    .csh-action-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 64px 64px;
-      gap: 6px;
-      align-items: center;
-    }
-    .csh-primary-action,
-    .csh-secondary-action {
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 7px;
-      color: #f9fafb;
-      cursor: pointer;
-      font: 700 12px/1 'SF Mono','Consolas','Menlo',monospace;
-      height: 28px;
-      letter-spacing: 0;
-      transition: background 0.12s, border-color 0.12s, color 0.12s;
-    }
-    .csh-primary-action {
-      background: #2563eb;
-      border-color: #3b82f6;
-    }
-    .csh-primary-action:hover {
-      background: #1d4ed8;
-      border-color: #60a5fa;
-    }
-    .csh-secondary-action {
-      background: rgba(15,23,42,0.84);
-    }
-    .csh-secondary-action:hover {
-      background: #1f2937;
-      border-color: #94a3b8;
-    }
-    .csh-status {
-      color: #9ca3af;
-      font-size: 11px;
-      line-height: 1.35;
-      min-height: 15px;
-      overflow-wrap: anywhere;
+      min-height: 8px;
     }
     .csh-spacer {
       flex: 1 1 auto;
@@ -126,19 +76,19 @@
     }
     .csh-drag-handle {
       cursor: move;
-      color: #4b5563;
+      color: #9ca3af;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 2px 1px;
       align-self: center;
     }
-    .csh-drag-handle:hover { color: #f9fafb; }
+    .csh-drag-handle:hover { color: #22c55e; }
     .csh-btn {
       cursor: pointer;
       background: none;
       border: none;
-      color: #4b5563;
+      color: #9ca3af;
       padding: 0;
       line-height: 0;
       display: flex;
@@ -149,7 +99,7 @@
       align-self: center;
     }
     .csh-btn svg { flex-shrink: 0; }
-    .csh-btn:hover { color: #f9fafb; }
+    .csh-btn:hover { color: #22c55e; }
   `;
 
   global.RaBiToolUI = {
