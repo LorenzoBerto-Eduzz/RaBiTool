@@ -9,15 +9,17 @@ RaBiTool is a no-build Chrome Manifest V3 extension.
 - `project/background/config.js`: shared settings key and default settings.
 - `project/background/settings.js`: settings defaults, storage merge helpers, and install/update option opening.
 - `project/background/chrome_tabs.js`: Chrome tab/window/query/injection helpers.
+- `project/background/workspace_tabs.js`: activation-time RA/BI tab opening, tracking, readiness status, and explicit focus helpers.
 - `project/background/clipboard.js`: offscreen clipboard helper for Excel Web paste/import flows.
-- `project/background/reclame_aqui.js`: Reclame Aqui source-page and XLSX download scaffold.
-- `project/background/excel_sheet.js`: Excel Web destination scaffold.
+- `project/background/xlsx_report_parser.js`: direct XLSX ZIP/XML reader and 9-column RA report normalizer.
+- `project/background/reclame_aqui.js`: Reclame Aqui source-page automation and current XLSX download detection test path.
+- `project/background/excel_sheet.js`: Excel Web no-focus dry-run inspection and future paste support.
 - `project/background/ra_bi_workflow.js`: workflow action names and orchestration scaffold.
 - `project/background/runtime.js`: Chrome runtime listeners, workflow registration map, popup/settings message routing, and side-tab helper.
 - `project/content.js`: injected into matching pages. Owns popup creation/binding, popup position, extension toggle behavior, shortcut handling, and workflow button status.
 - `project/popup_ui.js`: pure shared popup markup and CSS string factory.
 - `project/options.html`: options page markup.
-- `project/options.js`: options UI logic, storage, Chrome shortcut display/shortcut-settings link, and options-page popup preview.
+- `project/options.js`: options UI logic, storage, Chrome shortcut display/shortcut-settings link, and options-page popup preview with the same `RA > BI` runtime action wiring.
 - `project/offscreen.html` / `project/offscreen.js`: clipboard fallback document.
 
 ## Workflow Boundaries
@@ -25,10 +27,11 @@ RaBiTool is a no-build Chrome Manifest V3 extension.
 Keep workflow code separated by responsibility:
 
 - RA source automation: `background/reclame_aqui.js`.
-- Download discovery and eventual XLSX handoff: `background/reclame_aqui.js` or a future parser module.
-- Excel destination automation: `background/excel_sheet.js`.
+- Download discovery: `background/reclame_aqui.js`.
+- XLSX parsing and report normalization: `background/xlsx_report_parser.js`.
+- Excel destination inspection/automation: `background/excel_sheet.js`.
 - Cross-step orchestration and status shape: `background/ra_bi_workflow.js`.
-- User controls/status: `popup_ui.js` and `content.js`.
+- User controls/status: `popup_ui.js`, `content.js`, and the options-page popup binding in `options.js`.
 
 When the exact page steps are known, implement them as named helpers with clear stages:
 
@@ -37,8 +40,8 @@ When the exact page steps are known, implement them as named helpers with clear 
 3. selector/action execution;
 4. download completion detection;
 5. row parsing/preparation;
-6. Excel tab discovery/opening;
-7. destination range preparation;
+6. Excel tab discovery without activation when possible;
+7. destination range inspection/preparation;
 8. import/paste/replace/append action;
 9. status reporting.
 
@@ -49,12 +52,12 @@ The popup is compact and fixed-position:
 - drag handle;
 - options gear;
 - close button;
-- `Atualizar BI` main action;
-- `RA` step action;
-- `Excel` step action;
-- status text.
+- `HugMe` and `Planilha` tracked-tab status/focus buttons;
+- `RA > BI` main action;
+- loading/current-process line;
+- stacked warning/result notices.
 
-The buttons currently call stable scaffold actions and show structured responses. Exact behavior will be filled in after owner-provided RA and Excel details.
+The tracked-tab buttons are outline-only: green/check means ready, blue/spinner means checking/loading, and red/X means blocked or login/permisson needed. The `RA > BI` button currently calls the first RA export/download workflow and shows structured responses. The current test build stops after Chrome reports the XLSX download as complete; parser/reconciliation/Excel paste resume only after the owner confirms this download leg is solid. The default placement is top-right; dragging saves the position, while browser resize/zoom should only keep the popup visible and should not save a new position.
 
 ## Permissions
 

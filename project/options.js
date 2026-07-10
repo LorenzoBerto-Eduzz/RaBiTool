@@ -1,10 +1,11 @@
 'use strict';
 
 const SETTINGS_KEY = 'rabiToolSettings';
-const OPTIONS_POPUP_POS_KEY = 'rabiToolOptionsPopupPosition';
+const WORKFLOW_STATUS_KEY = 'rabiToolWorkflowStatus';
+const OPTIONS_POPUP_POS_KEY = 'rabiToolOptionsPopupPositionTopRightV2';
 const SHORTCUTS_PAGE_URL = 'chrome://extensions/shortcuts';
 const DEFAULT_SETTINGS = {
-  enabled: true,
+  enabled: false,
   toolName: 'RaBiTool',
   reclameAquiUrl: '',
   excelWorkbookUrl: '',
@@ -13,7 +14,11 @@ const DEFAULT_SETTINGS = {
   notes: '',
   workflow: {
     mode: 'ui-automation',
-    importStrategy: 'replace-or-append-rows'
+    importStrategy: 'replace-or-append-rows',
+    reportLookbackDays: 45,
+    reportPollingMs: 2000,
+    reportProcessingTimeoutMs: 420000,
+    downloadTimeoutMs: 60000
   },
   shortcuts: {
     togglePopup: '',
@@ -26,7 +31,12 @@ const toggleSwitch = toggle.closest('.switch');
 const shortcutToggleEl = document.getElementById('sc-toggle');
 const shortcutListEl = document.getElementById('sc-list');
 let optionsPopup = null;
+let optionsPopupAnchoredTopRight = false;
 let shortcutRefreshTimer = null;
+let workspaceRefreshTimer = null;
+let optionsWorkflowRunning = false;
+let lastOptionsWorkflowStatus = null;
+let lastOptionsWorkspaceStatus = null;
 
 const SHORTCUT_WARNING_ICON_HTML = '<span class="sc-add-warning" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L1 21h22L12 3zm1 13h-2v-5h2v5zm0 3h-2v-2h2v2z"/></svg></span>';
 
@@ -113,14 +123,18 @@ function placeOptionsPopup() {
   chrome.storage.local.get(OPTIONS_POPUP_POS_KEY, (data) => {
     const pos = data?.[OPTIONS_POPUP_POS_KEY];
     if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
+      optionsPopupAnchoredTopRight = false;
       popup.style.left = `${pos.left}px`;
       popup.style.top = `${pos.top}px`;
+      popup.style.right = 'auto';
+      popup.style.bottom = 'auto';
     } else {
       const margin = 10;
-      const width = popup.offsetWidth || 356;
-      const height = popup.offsetHeight || 42;
-      popup.style.left = `${Math.max(margin, window.innerWidth - width - margin)}px`;
-      popup.style.top = `${Math.max(margin, window.innerHeight - height - margin)}px`;
+      optionsPopupAnchoredTopRight = true;
+      popup.style.left = 'auto';
+      popup.style.right = `${margin}px`;
+      popup.style.top = `${margin}px`;
+      popup.style.bottom = 'auto';
     }
     clampOptionsPopup();
   });
@@ -129,6 +143,13 @@ function placeOptionsPopup() {
 function clampOptionsPopup(save = false) {
   if (!optionsPopup) return;
   const margin = 10;
+  if (optionsPopupAnchoredTopRight) {
+    optionsPopup.style.left = 'auto';
+    optionsPopup.style.right = `${margin}px`;
+    optionsPopup.style.top = `${margin}px`;
+    optionsPopup.style.bottom = 'auto';
+    return;
+  }
   const rect = optionsPopup.getBoundingClientRect();
   const left = Math.max(margin, Math.min(rect.left, window.innerWidth - rect.width - margin));
   const top = Math.max(margin, Math.min(rect.top, window.innerHeight - rect.height - margin));
@@ -152,6 +173,11 @@ function bindOptionsPopupDragging() {
     event.preventDefault();
     dragging = true;
     const rect = popup.getBoundingClientRect();
+    optionsPopupAnchoredTopRight = false;
+    popup.style.left = `${rect.left}px`;
+    popup.style.top = `${rect.top}px`;
+    popup.style.right = 'auto';
+    popup.style.bottom = 'auto';
     offsetX = event.clientX - rect.left;
     offsetY = event.clientY - rect.top;
     document.body.style.userSelect = 'none';
@@ -180,6 +206,155 @@ function bindOptionsPopupButtons() {
   optionsPopup?.querySelector('#csh-btn-gear')?.addEventListener('click', () => {
     window.focus();
   });
+
+  optionsPopup?.querySelector('#csh-btn-run')?.addEventListener('click', () => runOptionsWorkflowButton());
+  optionsPopup?.querySelector('#csh-btn-tab-ra')?.addEventListener('click', () => focusOptionsWorkspaceTab('ra'));
+  optionsPopup?.querySelector('#csh-btn-tab-bi')?.addEventListener('click', () => focusOptionsWorkspaceTab('bi'));
+}
+
+function sendRuntimeMessage(message) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) return resolve(null);
+        resolve(response || null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+function optionNoticeIcon(level) {
+  if (level === 'error') return '!';
+  if (level === 'warn') return '!';
+  return 'i';
+}
+
+function setOptionsPopupNotices(notices = []) {
+  const status = optionsPopup?.querySelector('#csh-status');
+  if (!status) return;
+  status.textContent = '';
+  notices
+    .filter((item) => item && String(item.text || '').trim())
+    .forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'csh-status-item';
+      row.dataset.level = item.level || 'info';
+      const icon = document.createElement('span');
+      icon.className = 'csh-status-icon';
+      icon.textContent = optionNoticeIcon(item.level);
+      const text = document.createElement('span');
+      text.textContent = String(item.text || '').trim();
+      row.append(icon, text);
+      status.appendChild(row);
+    });
+}
+
+function setOptionsPopupStatus(text, level = 'info') {
+  setOptionsPopupNotices(text ? [{ level, text }] : []);
+}
+
+function setOptionsPopupProgress(active, text = '') {
+  const progress = optionsPopup?.querySelector('#csh-progress');
+  const progressText = optionsPopup?.querySelector('#csh-progress-text');
+  const runButton = optionsPopup?.querySelector('#csh-btn-run');
+  if (progress) progress.hidden = !active;
+  if (progressText) progressText.textContent = text || 'Aguardando...';
+  if (runButton) {
+    runButton.disabled = !!active;
+    runButton.dataset.running = active ? 'true' : 'false';
+  }
+}
+
+function setOptionsWorkspaceButton(kind, info = {}) {
+  const button = optionsPopup?.querySelector(`#csh-btn-tab-${kind}`);
+  const icon = optionsPopup?.querySelector(`.csh-tab-icon[data-kind="${kind}"]`);
+  if (!button || !icon) return;
+  const state = info.state || 'unknown';
+  button.dataset.state = state === 'unknown' ? 'checking' : state;
+  button.title = info.reason || (state === 'ready' ? 'Pronto' : 'Verificando');
+  icon.textContent = '';
+}
+
+function optionsWorkspaceNotices(status) {
+  return [status?.ra, status?.bi]
+    .filter((item) => item && item.state === 'error')
+    .map((item) => ({ level: 'warn', text: `${item.label}: ${item.reason}` }));
+}
+
+function optionsWorkflowNotices(status) {
+  const notices = Array.isArray(status?.notices) ? status.notices : [];
+  if (!notices.length) return [];
+  const specificWorkspaceNotices = optionsWorkspaceNotices(lastOptionsWorkspaceStatus);
+  const workspaceReady = [lastOptionsWorkspaceStatus?.ra, lastOptionsWorkspaceStatus?.bi]
+    .every((item) => item?.state === 'ready');
+  return notices.filter((item) => {
+    if (item?.stage !== 'tabs') return true;
+    return !workspaceReady && !specificWorkspaceNotices.length;
+  });
+}
+
+function renderOptionsCombinedNotices() {
+  if (!optionsPopup) return;
+  setOptionsPopupNotices([
+    ...optionsWorkspaceNotices(lastOptionsWorkspaceStatus),
+    ...optionsWorkflowNotices(lastOptionsWorkflowStatus)
+  ]);
+}
+
+function renderOptionsWorkspaceStatus(status) {
+  lastOptionsWorkspaceStatus = status || null;
+  setOptionsWorkspaceButton('ra', status?.ra);
+  setOptionsWorkspaceButton('bi', status?.bi);
+  renderOptionsCombinedNotices();
+}
+
+async function refreshOptionsWorkspaceStatus() {
+  if (!optionsPopup || optionsPopup.style.display === 'none') return;
+  const status = await sendRuntimeMessage({ action: 'GET_WORKSPACE_STATUS' });
+  if (status?.ok) renderOptionsWorkspaceStatus(status);
+}
+
+function startOptionsWorkspaceRefresh() {
+  clearInterval(workspaceRefreshTimer);
+  refreshOptionsWorkspaceStatus();
+  workspaceRefreshTimer = setInterval(refreshOptionsWorkspaceStatus, 2000);
+}
+
+async function focusOptionsWorkspaceTab(kind) {
+  const response = await sendRuntimeMessage({ action: 'FOCUS_WORKSPACE_TAB', kind });
+  const label = kind === 'ra' ? 'HugMe' : 'Planilha';
+  if (!response?.ok) setOptionsPopupStatus(response?.reason || `Nao consegui abrir a aba ${label}.`, 'error');
+}
+
+function renderOptionsWorkflowStatus(status) {
+  lastOptionsWorkflowStatus = status || null;
+  if (!optionsPopup) return;
+  const active = !!status?.running || !!status?.activeText;
+  setOptionsPopupProgress(active, status?.activeText || '');
+  optionsWorkflowRunning = !!status?.running;
+  renderOptionsCombinedNotices();
+}
+
+function refreshOptionsWorkflowStatus() {
+  chrome.storage.local.get(WORKFLOW_STATUS_KEY, (data) => {
+    renderOptionsWorkflowStatus(data?.[WORKFLOW_STATUS_KEY] || null);
+  });
+}
+
+async function runOptionsWorkflowButton() {
+  optionsWorkflowRunning = true;
+  setOptionsPopupProgress(true, 'Verificando abas...');
+  setOptionsPopupNotices([]);
+  const response = await sendRuntimeMessage({ action: 'RABITOOL_START_RA_TO_EXCEL' });
+  refreshOptionsWorkflowStatus();
+  if (!response) {
+    optionsWorkflowRunning = false;
+    setOptionsPopupProgress(false);
+    setOptionsPopupStatus('Nao foi possivel falar com o service worker.', 'error');
+    return;
+  }
 }
 
 function saveEnabled(enabled) {
@@ -194,7 +369,7 @@ function saveEnabled(enabled) {
 function loadEnabled() {
   chrome.storage.local.get(['enabled', SETTINGS_KEY], (data) => {
     const settings = withDefaultSettings(data?.[SETTINGS_KEY]);
-    const enabled = data.enabled !== false && settings.enabled !== false;
+    const enabled = data.enabled === true && settings.enabled !== false;
     toggle.checked = enabled;
     setOptionsPopupVisible(enabled);
     toggleSwitch.classList.add('is-ready');
@@ -212,14 +387,17 @@ shortcutListEl?.addEventListener('click', (event) => {
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes.enabled) return;
-  toggle.checked = changes.enabled.newValue !== false;
-  setOptionsPopupVisible(changes.enabled.newValue !== false);
+  if (area !== 'local') return;
+  if (changes.enabled) {
+    toggle.checked = changes.enabled.newValue === true;
+    setOptionsPopupVisible(changes.enabled.newValue === true);
+  }
+  if (changes[WORKFLOW_STATUS_KEY]) renderOptionsWorkflowStatus(changes[WORKFLOW_STATUS_KEY].newValue || null);
 });
 
 window.addEventListener('focus', loadShortcut);
 window.addEventListener('pageshow', loadShortcut);
-window.addEventListener('resize', () => clampOptionsPopup(true));
+window.addEventListener('resize', () => clampOptionsPopup(false));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') loadShortcut();
 });
@@ -230,3 +408,5 @@ setInterval(() => {
 
 loadEnabled();
 loadShortcut();
+startOptionsWorkspaceRefresh();
+refreshOptionsWorkflowStatus();

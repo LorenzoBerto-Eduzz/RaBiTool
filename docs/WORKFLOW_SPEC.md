@@ -80,6 +80,21 @@ Keep the workflow staged and modular:
 5. Excel Web writer: writes the prepared result into the mother sheet through the approved UI-based method.
 6. Safety/reporting layer: presents row counts, date spans, duplicate IDs, expected changes, and exact failure stages in the popup.
 
+## Tab Preconditions
+
+For the current implementation phase, RaBiTool opens/reuses the RA and mother-sheet workspace tabs when the extension is activated.
+
+- Chrome startup should leave the extension disabled/hidden.
+- Toolbar/action shortcut activation enables the extension and opens/reuses RA and BI tabs inactive to the side.
+- The extension tracks the tab IDs for RA and BI.
+- RAtoBI should use the tracked RA/HugMe export tab and Excel Web mother-sheet tab.
+- If either tab is missing/not ready during execution, stop before doing work and show `Abas do HugMe e Planilha Mae nao preparadas` or a more specific HugMe/Planilha readiness warning.
+- If the tabs exist but required page elements are not present yet, wait briefly/retry for the expected elements.
+- If required elements still do not appear after the bounded wait, stop with a clear error naming the missing stage/element.
+- The `HugMe`/`Planilha` buttons in the popup show readiness status and intentionally focus the tracked tab when clicked.
+- The background should continuously listen to tracked tab URL/status changes. When login/auth is detected, mark the tab blocked; after login resolves away from auth but not on the target page, automatically navigate that same tracked tab back to the exact target URL.
+- The floating popup cannot appear on Chrome internal pages such as the default new tab / `chrome://newtab`, because Chrome does not allow extension content scripts there.
+
 ## Business Safety Principles
 
 - Fail closed. If the tool cannot prove that headers, IDs, dates, target columns, or target range are correct, it must stop.
@@ -97,23 +112,86 @@ Keep the workflow staged and modular:
 
 - Reclame Aqui URL: likely `https://app.hugme.com.br/app.html#/dados/tickets/exportar/`.
 - Required login/session assumptions:
-- Date/filter fields:
-- Buttons/menu sequence:
-- Generated report status behavior: owner described a `Gerar relatorio` action, a `processando relatorio` state, reload/check behavior, and then a download button when the report is ready.
-- Expected download filename pattern:
+- Create-report page DOM has been inspected from a pasted page snapshot. Use selectors/labels cautiously because the app is Angular and may change classes/states.
+- Empresa dropdown: `select.empresa`, choose label `Eduzz`.
+- Titulo field: `input.titulo`, fill `RaBiToolRelatoriohhmmssddmmyy` where the numeric suffix is execution time in `hhmmssddmmyy` format.
+- Periodo mode: choose radio `#periodoADefinir` / label `A definir`.
+- Periodo start field: `#starty`, type/paste date as `ddmmyyyy`, set to current execution date minus 45 days, then press Enter so HugMe formats slashes.
+- Periodo end field: `#endy`, type/paste date as `ddmmyyyy`, set to current execution date, then press Enter.
+- Date fields must be validated before report generation: the tool should block if either field remains as raw digits and does not become `dd/mm/yyyy` after Enter/blur/change events.
+- Ordenacao field: `select.order`, owner asked for `Data Reclamação`.
+- Ordenacao type: `select.order-type`, owner corrected this to `ascendente` so the report has oldest rows first and latest rows at the bottom, matching the mother sheet.
+- Personalizar colunas: checkbox `#selAll`, select all columns.
+- Submit: button text `Gerar relatório`, `ng-click="submitFilter();"`.
+- Field-setting logic should first check current values and only change fields when needed.
+- Generated report list: under `Meus relatórios`, each active report appears as `li.item` with title in `h5`.
+- Generated report tracking: locate the current run by exact title `RaBiToolRelatoriohhmmssddmmyy`, not by first item alone.
+- Processing state: the current report item shows a disabled button with text `Processando relatório...`.
+- Ready state: the same report item exposes a visible `Download` button with `ng-click="download(i.id, $event)"` when `!i.processando && i.disponivel`.
+- Report metadata: item includes date, report ID text such as `ID: 4259804`, and user text.
+- Processing wait rule: check every 2 seconds for the matching report item to become downloadable.
+- Processing timeout: block after 420 seconds if the matching report is still not downloadable.
+- Expected download filename pattern: generated title plus `.xlsx`, for example `RaBiToolRelatoriohhmmssddmmyy.xlsx`; if HugMe/Chrome changes the filename, detect the fresh XLSX started after the download click.
 - Expected columns:
 - Export edge cases:
 
+## RA Create-Report Setup Stage
+
+First source automation milestone should stop after submitting the report request:
+
+1. Find the tracked RA/HugMe export tab.
+2. Wait briefly until the create-report form is visible.
+3. Confirm/select company `Eduzz`.
+4. Fill timestamped report title `RaBiToolRelatoriohhmmssddmmyy`.
+5. Switch period to `A definir`.
+6. Fill date range from execution date minus 45 days through execution date.
+7. Confirm/select ordering field `Data Reclamação`.
+8. Confirm/select ordering type `ascendente`.
+9. Confirm/select all report columns.
+10. Click `Gerar relatório`.
+11. Locate the generated report item by exact title.
+12. Detect that the report item entered processing state.
+
+Ordering note: RA should now be set to `ascendente`, matching the mother-sheet requirement that `Data Reclamação` is oldest-to-newest. Parser/reconciliation should still validate sort order and block if the report is not actually ascending.
+
+## RA Processing/Download Stage
+
+After submitting `Gerar relatório`, the next source automation milestone is:
+
+1. Watch the `Meus relatórios` list for the report item whose `h5` title exactly matches the generated `RaBiToolRelatoriohhmmssddmmyy`.
+2. If the item shows `Processando relatório...`, keep waiting/polling that same item every 2 seconds.
+3. If the item disappears, fails to appear, expires, or cannot be uniquely identified, stop with a clear error.
+4. When the item shows a visible `Download` button, click that button for the matching item only.
+5. Use Chrome downloads tracking to detect the resulting XLSX download and associate it with this run by matching the generated title.
+6. The downloaded file becomes the incoming report for parser/reconciliation.
+7. The current test build intentionally stops here after Chrome reports the XLSX download completed. Existing parser/reconciliation/Excel inspection modules remain in the codebase, but are deferred until the owner confirms the download leg is solid.
+
+Current implementation choice: poll the page every 2 seconds for up to 420 seconds. For the current test build, stop with success once Chrome reports the XLSX download completed. Parser, reconciliation, and Excel paste resume after the owner confirms the download leg is solid.
+
 ## Pending Destination Details
 
-- Excel workbook URL:
-- Worksheet/tab name:
-- Target start cell/range:
-- Replace/append/clear behavior:
-- Required formatting preservation:
-- Columns to fill:
-- Rows to skip or keep:
-- Success validation:
+- Excel workbook URL: configured as the SharePoint/Excel Web mother sheet URL in defaults; activation opens/reuses and tracks this tab for current v1.
+- Worksheet/tab name: `Relatório de Tickets`.
+- Target start cell/range: determined by locating the oldest report `Id HugMe` in the mother sheet; write should start in the matching row and the first mapped mother-sheet column.
+- Replace/append/clear behavior: replace from the oldest matching report row downward; append only if clearly newer; block when uncertain.
+- Required formatting preservation: future writer should paste values only, preserving existing sheet formatting where Excel Web allows it.
+- Columns to fill: the 9 required mapped columns, by header name.
+- Rows to skip or keep: do not touch unrelated historical rows before the affected window.
+- Success validation: still pending; should verify row count/anchor and allow one Excel Web `Ctrl+Z` recovery for the single paste.
+
+## Excel Web No-Focus Dry Run
+
+The available Excel inspection module attempts a conservative dry run after report parsing, but the current download-test build does not call this stage yet:
+
+1. Reuse the tracked Excel Web tab without activating/focusing it.
+2. Inject an inspection script into that tab.
+3. Detect the configured worksheet name in page text/title.
+4. Collect readable grid cells from accessible DOM attributes such as `role="gridcell"`, `aria-rowindex`, and `aria-colindex`.
+5. Confirm the 9 required mother-sheet headers by cell position, not just loose page text.
+6. Inspect visible data rows and try to find the oldest report `Id HugMe` as the replacement anchor.
+7. If any of those proofs fail, block with a specific stage/reason.
+
+Known limitation: Excel Web may virtualize or canvas-render the workbook. If it does not expose enough row/cell data to a background-tab content script, the dry run will correctly block. Later fallback options are Excel Web search/find automation, a controlled focus-required paste flow, workbook export/import, or a user-approved file/clipboard bridge.
 
 ## Pending Reconciliation Rules
 
@@ -122,6 +200,7 @@ Keep the workflow staged and modular:
 - If the incoming report contains rows newer than the current mother-sheet tail, those rows are added below the replaced overlap.
 - If the oldest incoming report ticket is not found in the mother sheet, append the normalized report rows below the mother sheet only when the report is clearly newer than the current mother-sheet tail. The report rows are placed at the end.
 - The paste/write should include only the columns used by the mother sheet, mapped from the report headers, not all report columns.
+- The Excel Web write should be implemented as one contiguous paste action for the prepared affected range whenever possible. The intended operator recovery path is a single Excel Web `Ctrl+Z` to undo the extension's write if review/testing shows something wrong.
 - Existing rows are replaced as full mother-sheet rows for the mapped columns, because older tickets can receive updated fields later such as resolution, return-to-business, note/CSAT, assignee, tags, or client type.
 - The incoming report is authoritative for the mapped mother-sheet columns. If a mapped report field is blank, that blank should overwrite the existing mother-sheet value for that field.
 - Safety check: when the oldest report ticket is found in the mother sheet, also take the last/current most recent mother-sheet ticket and find it in the incoming report.
@@ -157,12 +236,12 @@ Before heavy development, align in this order:
 
 ## Popup/UI Alignment
 
-- Current visible popup baseline should be a clean shell: drag handle, settings gear, close icon, top separator, and empty body.
-- Workflow buttons are not visible in the shell until their behavior is aligned.
-- Visual direction: white popup, gray icons, gray separator line, icons hover green/light green.
+- Current visible popup baseline is a compact top-right tool: drag handle, settings gear, close icon, top separator, outline `HugMe`/`Planilha` tracked-tab status buttons, `RA > BI` button, loading/current-process line, and stacked warning/result notices.
+- Visual direction: white popup, gray icons, gray separator line, icons hover green/light green. Tracked-tab buttons are outline-only and use green/check when ready, blue/spinner while checking, and red/X when blocked.
 - Popup should be toggleable by the extension action/shortcut.
-- Future shortcuts and workflow buttons should be added after the core flow is aligned.
-- Exact default corner placement needs final wording confirmation because the owner described "bottom top corner"; current code still uses the existing floating placement behavior unless updated.
+- The `RA > BI` button should work from the normal content-script popup and from the options-page popup preview.
+- `HugMe`/`Planilha` status buttons show spinner/check/X and focus the tracked tab when clicked.
+- The popup defaults to the top-right corner and remains draggable. Browser resize/zoom should not save a new popup position.
 
 ## Known Risks
 

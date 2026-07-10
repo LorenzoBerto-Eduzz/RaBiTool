@@ -3,6 +3,8 @@ importScripts(
   'background/settings.js',
   'background/clipboard.js',
   'background/chrome_tabs.js',
+  'background/workspace_tabs.js',
+  'background/xlsx_report_parser.js',
   'background/reclame_aqui.js',
   'background/excel_sheet.js',
   'background/ra_bi_workflow.js',

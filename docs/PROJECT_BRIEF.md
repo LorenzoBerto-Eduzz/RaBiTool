@@ -36,7 +36,8 @@ The project should be developed as a reliable business-data workflow, not as a l
 - Project identity and settings renamed to RaBiTool.
 - Popup gets project workflow controls and status text.
 - Background workflow action names are stable.
-- RA export and Excel import modules exist as scaffolds.
+- RA export/download automation exists for the current HugMe flow and is being tested through completed XLSX download detection.
+- Excel import modules exist as conservative parser/inspection scaffolds, but the active test build intentionally stops before parser/reconciliation/paste until the owner verifies the download leg.
 - Downloads, offscreen clipboard, tabs, scripting, and commands are available for the prototype.
 - Broad host permissions remain during discovery.
 - Durable docs capture the current two-spreadsheet model and alignment-first development plan.
@@ -44,8 +45,8 @@ The project should be developed as a reliable business-data workflow, not as a l
 
 ## Out Of Scope For Now
 
-- Exact Reclame Aqui selectors and button flows until supplied by the owner.
-- Exact Excel worksheet/range placement until supplied by the owner.
+- Additional Reclame Aqui filters or changed button flows beyond the currently aligned HugMe export path.
+- Actual Excel Web paste/write until the owner verifies the HugMe download leg and then aligns the final write path.
 - Parsing real customer XLSX exports committed to the repo.
 - API integrations with Reclame Aqui, Microsoft Graph, or other external services.
 - Public release packaging.

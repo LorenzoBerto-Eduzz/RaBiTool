@@ -5,6 +5,7 @@ function mergeShortcuts(rawShortcuts = {}) {
 
 function withDefaultSettings(raw = {}) {
   const merged = { ...DEFAULT_SETTINGS, ...(raw || {}) };
+  merged.workflow = { ...DEFAULT_SETTINGS.workflow, ...(raw?.workflow || {}) };
   merged.shortcuts = mergeShortcuts(raw?.shortcuts);
   return merged;
 }
@@ -18,8 +19,16 @@ function ensureDefaultSettings(callback) {
   });
 }
 
+function setStartupDisabled(callback) {
+  chrome.storage.local.get(SETTINGS_KEY, (data) => {
+    const settings = withDefaultSettings(data?.[SETTINGS_KEY]);
+    settings.enabled = false;
+    chrome.storage.local.set({ enabled: false, [SETTINGS_KEY]: settings }, () => callback?.());
+  });
+}
+
 function handleInstalled(details = {}) {
-  ensureDefaultSettings(() => {
+  setStartupDisabled(() => {
     if (details.reason === 'install' || details.reason === 'update') {
       chrome.runtime.openOptionsPage();
     }

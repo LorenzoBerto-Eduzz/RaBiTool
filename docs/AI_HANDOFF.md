@@ -61,22 +61,34 @@ The private sample workbook previously inspected placed the mother-sheet snippet
 - First reconciliation strategy: find the oldest incoming report ticket in the mother sheet, validate the overlap through the current most recent mother-sheet ticket, then replace from the oldest matching mother-sheet row downward with normalized report rows.
 - Safety rule: if overlap row counts between mother sheet and report do not match, stop and show an error rather than writing.
 - Append-only rule: if the oldest report ticket is not found in the mother sheet, append at the end only when the report is clearly newer than the current mother-sheet tail.
+- Excel Web write requirement: prefer one contiguous paste action for the prepared affected range so the owner can use a single `Ctrl+Z` in Excel Web to revert the extension's write during review/testing. Avoid multi-step cell-by-cell writes unless explicitly realigned, because they may fragment Excel's undo stack.
+- RA form setup alignment: on `https://app.hugme.com.br/app.html#/dados/tickets/exportar/`, choose company `Eduzz`, fill a timestamped title `RaBiToolRelatoriohhmmssddmmyy`, choose period `A definir`, type date fields as `ddmmyyyy` with start date execution date minus 45 days and end date execution date, press Enter after each date so HugMe formats slashes, select order field `Data Reclamação`, select order type `ascendente`, select all columns, and click `Gerar relatório`.
+- RA processing/download alignment: after submit, locate the matching `Meus relatórios` item by exact title, poll every 2 seconds while it shows `Processando relatório...`, block after 420 seconds if not ready, then click that same item's visible `Download` button when available. Track the resulting Chrome XLSX download by matching the generated title when possible and otherwise by a fresh XLSX started after the click.
 - Once all guards pass, owner prefers the workflow to proceed automatically/quickly rather than requiring extra confirmation.
 - Owner prefers development to move toward the real RA report generation/download flow early, while keeping parser/reconciliation modular and testable.
 - Real customer data, IDs, screenshots, exports, and workbook details must stay out of Git.
 
 ## Runtime Baseline
 
-- Floating popup is injected into supported pages.
-- Current visible popup shell contains drag, gear, close, separator, and empty body.
-- Current visual direction: white popup, gray icons/separator, green/light-green hover for icons.
-- Workflow buttons are intentionally hidden until button behavior is aligned.
-- Stable workflow action names already exist for future popup buttons:
+- Extension starts disabled/hidden on Chrome startup. Activation via toolbar/action shortcut enables it for the session and opens/reuses the RA and BI workspace tabs inactive to the side.
+- Floating popup is injected into supported pages after activation.
+- Current visible popup contains drag, gear, close, separator, outline `HugMe`/`Planilha` tracked-tab buttons, a `RA > BI` button, a loading/current-process line, and stacked warning/result notices.
+- Current visual direction: white popup, gray icons/separator, green/light-green hover for chrome icons; tracked-tab buttons are outline-only and use green/check when ready, blue/spinner while checking, and red/X when blocked.
+- `RA > BI` currently runs the first test implementation of the RA export/download path.
+- Stable workflow action names:
   - `RABITOOL_START_RA_TO_EXCEL`
   - `RABITOOL_PREPARE_RA_EXPORT`
   - `RABITOOL_PREPARE_EXCEL_IMPORT`
 - These actions currently return structured "not configured yet" responses until exact RA/Excel steps are supplied.
-- Options page shows enable toggle, Chrome shortcut row, popup preview, support placeholders, and workflow summary.
+- Current implemented test scope: `RABITOOL_START_RA_TO_EXCEL` requires both RA and Excel tabs, fills/submits the RA report form, polls the matching generated report, clicks Download, waits for a matching XLSX download, and then stops with a success message showing the detected filename. XLSX parsing, Excel inspection, and actual paste/write are intentionally deferred until the owner confirms the download leg is solid.
+- XLSX parser module: `project/background/xlsx_report_parser.js`. It reads XLSX ZIP/XML directly in the browser, detects the real header row, maps the 9 target columns by header, validates nonblank/unique `Id HugMe`, validates parseable `Data Reclamação`, and blocks if report dates are not ascending. Parsed rows are cached in service-worker memory for the next workflow step and are not persisted to Git/storage.
+- Excel dry-run module: `project/background/excel_sheet.js`. It injects into the Excel tab without activating it, tries to detect the configured worksheet, readable grid cells, the 9 required headers, visible data rows, and the oldest report `Id HugMe` as an anchor. If Excel Web does not expose enough DOM/cell state in a background tab, it blocks with `excel-inspect`, `excel-headers`, `excel-data-window`, or `excel-anchor` instead of writing.
+- Workspace tab behavior: activation opens/reuses and tracks HugMe `https://app.hugme.com.br/app.html#/dados/tickets/exportar/` and Planilha `https://eduzz.sharepoint.com/:x:/s/BI/IQD6u3ZLO0KJTLwdN11bRG8ZAS5Nj2f5Nry7-F5WpL1iDnE?e=qQorVa` as inactive side tabs. The popup shows `HugMe`/`Planilha` half-width status buttons with spinner/check/X; clicking either button intentionally focuses that tracked tab for visual inspection.
+- Workspace tabs listen continuously with Chrome tab update/remove events. If a tracked tab enters login/auth, the tool marks it blocked; after auth resolves to a non-target page, it automatically navigates the same tracked tab back to the required HugMe export URL or Planilha workbook URL.
+- Chrome internal pages such as the default new tab / `chrome://newtab` cannot receive injected content-script UI, so the floating popup cannot appear on that page. Activation from there can still open/reuse workspace tabs; the popup appears once a supported web page or tracked workspace tab is focused.
+- If required tabs are missing/not ready during `RA > BI`, stop with the clear popup error `Abas do HugMe e Planilha Mae nao preparadas` or with a more specific HugMe/Planilha readiness warning. If tabs exist but required elements are not loaded yet, wait/retry briefly; if still missing, stop with a clear stage/element error.
+- Options page currently keeps only the enable toggle/header, Chrome shortcut row, and popup preview. The options-page popup preview also wires the `RA > BI` button to the real runtime action so missing-tab and workflow errors are visible there too. Extra workflow/support/version sections were removed for simplicity.
+- Default popup placement is top-right. The popup remains draggable and saves deliberate dragged positions under the current top-right position key. Resize/zoom should not save new positions.
 - Toolbar click and Chrome activation shortcut toggle shared `enabled` storage.
 
 ## Main Source Files
@@ -84,8 +96,10 @@ The private sample workbook previously inspected placed the mother-sheet snippet
 - `project/manifest.json`: name, permissions, content-script matches, commands.
 - `project/background.js`: service worker import order.
 - `project/background/config.js`: settings key and defaults.
+- `project/background/workspace_tabs.js`: activation workspace tab opening/tracking/status/focus helpers.
+- `project/background/xlsx_report_parser.js`: XLSX ZIP/XML reader and RA report normalizer.
 - `project/background/reclame_aqui.js`: RA source/download scaffold.
-- `project/background/excel_sheet.js`: Excel destination scaffold.
+- `project/background/excel_sheet.js`: Excel destination no-focus dry-run inspection and future paste support.
 - `project/background/ra_bi_workflow.js`: workflow action names and orchestration scaffold.
 - `project/background/runtime.js`: runtime message routing.
 - `project/content.js`: injected popup, shortcut behavior, workflow button handlers.
@@ -117,7 +131,7 @@ Before implementing the real workflow, align with the owner in this order:
 2. Reconciliation behavior: refine edge cases around missing oldest report ticket, missing current most recent mother-sheet ticket, sorting validation, append-only behavior, and confirmation before write.
 3. Safety gates: what blocks execution versus what only warns.
 4. Report intake method: direct capture/fetch of the downloaded XLSX versus file-picker fallback.
-5. Excel Web write method: workbook/tab/range, paste/import strategy, and validation after writing.
+5. Excel Web write method: workbook/tab/range, paste/import strategy, and validation after writing. Owner prefers no tab focus/switching unless absolutely required; if final paste needs focus, the tool should make that explicit rather than silently stealing view.
 6. Exact RA page automation: URL, filters, buttons, processing state, reload/check behavior, and download trigger.
 7. Popup/meta workflow: statuses, confirmations, keybinds, tab checks, and recovery flows.
 

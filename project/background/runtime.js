@@ -32,14 +32,25 @@ function sendToTab(tabId, message, callback) {
 }
 
 chrome.runtime.onInstalled.addListener(handleInstalled);
-chrome.runtime.onStartup?.addListener(ensureDefaultSettings);
+chrome.runtime.onStartup?.addListener(setStartupDisabled);
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  handleWorkspaceTabUpdated(tabId, changeInfo, tab);
+});
+chrome.tabs.onRemoved.addListener((tabId) => {
+  handleWorkspaceTabRemoved(tabId);
+});
 
-chrome.action?.onClicked?.addListener(() => {
+chrome.action?.onClicked?.addListener((tab) => {
   chrome.storage.local.get(['enabled', SETTINGS_KEY], ({ enabled, [SETTINGS_KEY]: rawSettings }) => {
     const nextEnabled = !enabled;
     const settings = withDefaultSettings(rawSettings);
     settings.enabled = nextEnabled;
-    chrome.storage.local.set({ enabled: nextEnabled, [SETTINGS_KEY]: settings });
+    chrome.storage.local.set({ enabled: nextEnabled, [SETTINGS_KEY]: settings }, () => {
+      if (nextEnabled) {
+        clearFinishedRaBiWorkflowStatus();
+        ensureWorkspaceTabs(tab);
+      }
+    });
   });
 });
 
@@ -56,9 +67,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const settings = withDefaultSettings(data?.[SETTINGS_KEY]);
       settings.enabled = enabled;
       chrome.storage.local.set({ enabled, [SETTINGS_KEY]: settings }, () => {
+        if (enabled) {
+          clearFinishedRaBiWorkflowStatus();
+          ensureWorkspaceTabs(sender.tab);
+        }
         sendResponse({ ok: !chrome.runtime.lastError });
       });
     });
+    return true;
+  }
+
+  if (message?.action === 'GET_WORKSPACE_STATUS') {
+    getWorkspaceStatus().then(sendResponse);
+    return true;
+  }
+
+  if (message?.action === 'GET_WORKFLOW_STATUS') {
+    chrome.storage.local.get(WORKFLOW_STATUS_KEY, (data) => {
+      sendResponse({ ok: true, status: data?.[WORKFLOW_STATUS_KEY] || null });
+    });
+    return true;
+  }
+
+  if (message?.action === 'FOCUS_WORKSPACE_TAB') {
+    focusWorkspaceTab(message.kind).then(sendResponse);
     return true;
   }
 
@@ -69,13 +101,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   const workflowPromise = runWorkflowAction(message?.action, message, sender);
   if (workflowPromise) {
-    workflowPromise.then(sendResponse);
+    workflowPromise
+      .then(sendResponse)
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          stage: 'workflow',
+          reason: error?.message || String(error) || 'Erro inesperado no workflow.'
+        });
+      });
     return true;
   }
 
   if (message?.action === 'GET_RABITOOL_SETTINGS') {
     chrome.storage.local.get([SETTINGS_KEY, 'enabled'], (data) => {
-      sendResponse({ ok: true, enabled: data.enabled !== false, settings: withDefaultSettings(data[SETTINGS_KEY]) });
+      sendResponse({ ok: true, enabled: data.enabled === true, settings: withDefaultSettings(data[SETTINGS_KEY]) });
     });
     return true;
   }
