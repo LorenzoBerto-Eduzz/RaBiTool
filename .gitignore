@@ -12,6 +12,7 @@ ExtensionTemplateRelease/
 local_assets/
 local_data/
 private_data/
+project/local_test_data/
 *.local
 .env
 .env.*

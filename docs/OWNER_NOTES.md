@@ -42,7 +42,9 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 - Development should move toward the real RA report generation/download flow early, while still keeping parser/reconciliation modules clean and testable.
 - RA report setup uses `Data Reclamação` with order type `ascendente`, so latest rows are at the bottom like the mother sheet.
 - RA processing should be checked every 2 seconds and blocked after 420 seconds if the report is not downloadable.
-- Current test build intentionally stops once Chrome reports the XLSX download completed. The owner will test and verify this download leg before the project resumes XLSX parsing, reconciliation, and mother-sheet paste/write work.
+- Current build continues through download, XLSX validation, guarded Excel Web worksheet confirmation, keyboard-based overlap validation, TSV preparation, clipboard copy, and one-block paste when safe.
+- Excel Web phase currently must focus/activate the Planilha tab because Excel Find, selection, copy, clipboard read, and paste are tied to the active workbook surface. This is acceptable for now as long as the popup makes the step clear, for example `Validando Planilha Mae...` followed by an explicit focus/paste status.
+- Before writing, the tool now checks that the active Excel worksheet is the configured destination, currently `Relatorio de Tickets`; if not, it blocks before search/paste.
 - Future Excel Web writing should prefer a single contiguous paste action, so the owner can use one `Ctrl+Z` in Excel Web to revert the extension's write during review/testing.
 - Owner prefers the extension to work on existing RA/Excel tabs in the background without switching/focusing them. If Excel Web later proves that final paste requires focus, the tool should state that clearly rather than silently stealing view.
 
@@ -56,14 +58,14 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 
 ## Recommended Next Alignment
 
-After the owner confirms the HugMe download leg works reliably, continue with the data/reconciliation rules and mother-sheet paste path:
+After the owner tests the guarded Planilha flow, continue with refinement of the focused keyboard paste path:
 
 1. Confirm required columns and validation rules.
 2. `Id HugMe` is confirmed as the unique ticket/case key.
 3. First replacement approach is to find the oldest incoming report ticket in the mother sheet, validate the overlap through the current mother-sheet tail, then replace from that row downward.
 4. Define final edge cases: missing current latest mother-sheet ticket in the report, unexpected older report rows, optional blank fields, and whether a preview/confirmation is required.
 5. Define what warnings/errors should block execution.
-6. Then align RA page buttons and Excel Web write mechanics.
+6. Refine popup statuses so each blocking/current step is clear during focused Excel automation.
 
 ## Git Identity Alignment
 

@@ -234,6 +234,59 @@ function parseReportDateValue(value) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+function sameReportColumn(column, expected) {
+  return normalizeReportHeader(column) === normalizeReportHeader(expected);
+}
+
+function formatIntegerLikeValue(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const number = Number(text.replace(',', '.'));
+  if (!Number.isFinite(number)) return text;
+  return String(Math.round(number));
+}
+
+function formatDecimalLikeValue(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const number = Number(text.replace(',', '.'));
+  if (!Number.isFinite(number)) return text;
+  return Number.isInteger(number) ? String(number) : String(number).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
+function formatExcelSerialDateForSheet(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+
+  const serial = Number(text.replace(',', '.'));
+  if (Number.isFinite(serial) && serial > 20000 && serial < 80000) {
+    const date = new Date(Math.round((serial - 25569) * 86400000));
+    const pad = (number) => String(number).padStart(2, '0');
+    return `${pad(date.getUTCDate())}/${pad(date.getUTCMonth() + 1)}/${date.getUTCFullYear()} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
+  }
+
+  const br = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::\d{2})?)?/);
+  if (br) {
+    const day = String(Number(br[1])).padStart(2, '0');
+    const month = String(Number(br[2])).padStart(2, '0');
+    const year = br[3].length === 2 ? `20${br[3]}` : br[3];
+    const hour = String(Number(br[4] || 0)).padStart(2, '0');
+    const minute = String(Number(br[5] || 0)).padStart(2, '0');
+    return `${day}/${month}/${year} ${hour}:${minute}`;
+  }
+
+  return text;
+}
+
+function normalizeReportCellValue(column, value) {
+  const text = String(value ?? '').trim();
+  if (sameReportColumn(column, 'Id HugMe')) return formatIntegerLikeValue(text);
+  if (sameReportColumn(column, 'Data Reclamação')) return formatExcelSerialDateForSheet(text);
+  if (sameReportColumn(column, 'Nota')) return formatDecimalLikeValue(text);
+  if (sameReportColumn(column, 'Tempo primeira resposta (público)')) return formatIntegerLikeValue(text);
+  return text;
+}
+
 function validateReportRows(rows) {
   const seen = new Set();
   let previousDate = null;
@@ -255,6 +308,17 @@ function validateReportRows(rows) {
   return '';
 }
 
+function getReportBoundarySummary(rows) {
+  const first = rows[0] || {};
+  const last = rows[rows.length - 1] || {};
+  return {
+    firstId: first['Id HugMe'] || '',
+    lastId: last['Id HugMe'] || '',
+    firstDate: first['Data Reclamação'] || first['Data ReclamaÃ§Ã£o'] || '',
+    lastDate: last['Data Reclamação'] || last['Data ReclamaÃ§Ã£o'] || ''
+  };
+}
+
 function normalizeReportRowsFromWorksheet(rows, sheetPath) {
   const header = findReportHeader(rows);
   if (!header) {
@@ -269,7 +333,7 @@ function normalizeReportRowsFromWorksheet(rows, sheetPath) {
 
     for (const column of RABI_TARGET_COLUMNS) {
       const sourceIndex = header.map.get(normalizeReportHeader(column));
-      const value = String(source.values[sourceIndex] ?? '').trim();
+      const value = normalizeReportCellValue(column, source.values[sourceIndex]);
       normalized[column] = value;
       if (value) hasAnyValue = true;
     }
@@ -310,16 +374,19 @@ async function parseRaReportXlsx(arrayBuffer) {
     const xml = decodeEntryText(entries, sheetPath);
     const parsed = normalizeReportRowsFromWorksheet(parseWorksheetRows(xml, sharedStrings), sheetPath);
     if (parsed.ok) {
-    return {
-      ok: true,
-      stage: 'xlsx-parser',
+      const summary = getReportBoundarySummary(parsed.rows);
+      return {
+        ok: true,
+        stage: 'xlsx-parser',
         columns: [...RABI_TARGET_COLUMNS],
         sheetPath: parsed.sheetPath,
         headerRowNumber: parsed.headerRowNumber,
-      rowCount: parsed.rows.length,
-      firstId: parsed.rows[0]['Id HugMe'],
-      lastId: parsed.rows[parsed.rows.length - 1]['Id HugMe'],
-      rows: parsed.rows
+        rowCount: parsed.rows.length,
+        firstId: summary.firstId,
+        lastId: summary.lastId,
+        firstDate: summary.firstDate,
+        lastDate: summary.lastDate,
+        rows: parsed.rows
       };
     }
     failures.push(parsed.reason);
@@ -359,6 +426,32 @@ async function fetchAndParseRaReportDownload(download) {
       ok: false,
       stage: 'xlsx-fetch',
       reason: `Chrome/HugMe bloqueou a leitura automatica do XLSX: ${error?.message || String(error)}`
+    };
+  }
+}
+
+async function fetchAndParsePackagedRaReport(resourcePath) {
+  const path = String(resourcePath || '').replace(/^\/+/, '');
+  if (!path) {
+    return { ok: false, stage: 'xlsx-fetch', reason: 'Caminho do XLSX empacotado nao informado.' };
+  }
+
+  try {
+    const response = await fetch(chrome.runtime.getURL(path), { cache: 'no-store' });
+    if (!response.ok) {
+      return {
+        ok: false,
+        stage: 'xlsx-fetch',
+        reason: `Nao foi possivel ler o XLSX local empacotado (${response.status}): ${path}`
+      };
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return parseRaReportXlsx(arrayBuffer);
+  } catch (error) {
+    return {
+      ok: false,
+      stage: 'xlsx-fetch',
+      reason: `Chrome nao conseguiu ler o XLSX local empacotado ${path}: ${error?.message || String(error)}`
     };
   }
 }

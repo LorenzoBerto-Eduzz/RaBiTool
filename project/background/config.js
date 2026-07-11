@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS = {
   toolName: 'RaBiTool',
   reclameAquiUrl: 'https://app.hugme.com.br/app.html#/dados/tickets/exportar/',
   excelWorkbookUrl: 'https://eduzz.sharepoint.com/:x:/s/BI/IQD6u3ZLO0KJTLwdN11bRG8ZAS5Nj2f5Nry7-F5WpL1iDnE',
-  excelWorksheetName: 'Relatório de Tickets',
+  excelWorksheetName: 'Relat\u00f3rio de Tickets',
   targetHosts: 'Reclame Aqui; Excel Web',
   notes: '',
   workflow: {

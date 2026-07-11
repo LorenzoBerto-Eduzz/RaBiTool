@@ -35,6 +35,8 @@
   let workflowRunning = false;
   let lastWorkflowStatus = null;
   let lastWorkspaceStatus = null;
+  let lastWorkspaceRenderSignature = '';
+  let lastRenderedNoticesSignature = '';
   let settings = { ...DEFAULT_SETTINGS, shortcuts: { ...DEFAULT_SETTINGS.shortcuts } };
 
   function isSupportedPage() {
@@ -164,6 +166,7 @@
     });
     popup.querySelector('#csh-btn-gear')?.addEventListener('click', () => sendMessage({ action: 'OPEN_OPTIONS' }));
     popup.querySelector('#csh-btn-run')?.addEventListener('click', () => runWorkflowButton('RABITOOL_START_RA_TO_EXCEL'));
+    popup.querySelector('#csh-btn-test-paste')?.addEventListener('click', () => runWorkflowButton('RABITOOL_TEST_PASTE_FIXED_XLSX'));
     popup.querySelector('#csh-btn-tab-ra')?.addEventListener('click', () => focusWorkspaceTab('ra'));
     popup.querySelector('#csh-btn-tab-bi')?.addEventListener('click', () => focusWorkspaceTab('bi'));
   }
@@ -174,12 +177,33 @@
     return 'i';
   }
 
+  function noticeSignature(notices = []) {
+    return JSON.stringify(uniqueNotices(notices));
+  }
+
+  function uniqueNotices(notices = []) {
+    const seen = new Set();
+    const unique = [];
+    for (const item of notices) {
+      const text = String(item?.text || '').trim();
+      if (!text) continue;
+      const level = item.level || 'info';
+      const key = `${level}:${text}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push({ level, text });
+    }
+    return unique;
+  }
+
   function setNotices(notices = []) {
     const status = popup?.querySelector('#csh-status');
     if (!status) return;
+    const signature = noticeSignature(notices);
+    if (signature === lastRenderedNoticesSignature) return;
+    lastRenderedNoticesSignature = signature;
     status.textContent = '';
-    notices
-      .filter((item) => item && String(item.text || '').trim())
+    uniqueNotices(notices)
       .forEach((item) => {
         const row = document.createElement('div');
         row.className = 'csh-status-item';
@@ -201,13 +225,13 @@
   function setProgress(active, text = '') {
     const progress = popup?.querySelector('#csh-progress');
     const progressText = popup?.querySelector('#csh-progress-text');
-    const runButton = popup?.querySelector('#csh-btn-run');
+    const buttons = popup?.querySelectorAll('.csh-run-btn') || [];
     if (progress) progress.hidden = !active;
     if (progressText) progressText.textContent = text || 'Aguardando...';
-    if (runButton) {
-      runButton.disabled = !!active;
-      runButton.dataset.running = active ? 'true' : 'false';
-    }
+    buttons.forEach((button) => {
+      button.disabled = !!active;
+      button.dataset.running = active ? 'true' : 'false';
+    });
   }
 
   function setWorkspaceButton(kind, info = {}) {
@@ -215,9 +239,11 @@
     const icon = popup?.querySelector(`.csh-tab-icon[data-kind="${kind}"]`);
     if (!button || !icon) return;
     const state = info.state || 'unknown';
-    button.dataset.state = state === 'unknown' ? 'checking' : state;
-    button.title = info.reason || (state === 'ready' ? 'Pronto' : 'Verificando');
-    icon.textContent = state === 'checking' ? '' : '';
+    const nextState = state === 'unknown' ? 'checking' : state;
+    const nextTitle = info.reason || (state === 'ready' ? 'Pronto' : 'Verificando');
+    if (button.dataset.state !== nextState) button.dataset.state = nextState;
+    if (button.title !== nextTitle) button.title = nextTitle;
+    if (icon.textContent) icon.textContent = '';
   }
 
   function workspaceNotices(status) {
@@ -254,10 +280,29 @@
     renderCombinedNotices();
   }
 
+  function workspaceStatusSignature(status) {
+    return JSON.stringify({
+      ra: status?.ra ? {
+        state: status.ra.state || '',
+        reason: status.ra.reason || '',
+        tabId: status.ra.tabId || null
+      } : null,
+      bi: status?.bi ? {
+        state: status.bi.state || '',
+        reason: status.bi.reason || '',
+        tabId: status.bi.tabId || null
+      } : null
+    });
+  }
+
   async function refreshWorkspaceStatus() {
     if (!popup) return;
     const status = await sendMessage({ action: 'GET_WORKSPACE_STATUS' });
-    if (status?.ok) renderWorkspaceStatus(status);
+    if (!status?.ok) return;
+    const signature = workspaceStatusSignature(status);
+    if (signature === lastWorkspaceRenderSignature) return;
+    lastWorkspaceRenderSignature = signature;
+    renderWorkspaceStatus(status);
   }
 
   function startWorkspacePolling() {
@@ -306,7 +351,19 @@
     }
   }
 
-  function createPopup() {
+  function focusRunButton() {
+    const runButton = popup?.querySelector('#csh-btn-run');
+    if (!runButton) return;
+    requestAnimationFrame(() => {
+      try {
+        runButton.focus({ preventScroll: true });
+      } catch (_) {
+        runButton.focus();
+      }
+    });
+  }
+
+  function createPopup(options = {}) {
     if (!enabled || popup || !document.body || !isSupportedPage()) return;
     ensureStyle();
     document.getElementById(POPUP_ID)?.remove();
@@ -315,6 +372,8 @@
     popup.style.visibility = 'hidden';
     popup.innerHTML = window.RaBiToolUI?.getMarkup?.() || '';
     document.body.appendChild(popup);
+    lastWorkspaceRenderSignature = '';
+    lastRenderedNoticesSignature = '';
 
     chrome.storage.local.get(POSITION_KEY, (data) => {
       const pos = data?.[POSITION_KEY];
@@ -333,6 +392,7 @@
       }
       popup.style.visibility = 'visible';
       clampPopup();
+      if (options.autofocusRun) focusRunButton();
     });
 
     bindDragging();
@@ -350,7 +410,7 @@
 
   function togglePopup() {
     if (popup) removePopup();
-    else createPopup();
+    else createPopup({ autofocusRun: true });
   }
 
   function runShortcut(actionId) {
@@ -384,7 +444,7 @@
     if (changes[WORKFLOW_STATUS_KEY]) renderWorkflowStatus(changes[WORKFLOW_STATUS_KEY].newValue || null);
     if (changes.enabled) {
       enabled = changes.enabled.newValue === true;
-      if (enabled) createPopup();
+      if (enabled) createPopup({ autofocusRun: true });
       else removePopup();
     }
   });

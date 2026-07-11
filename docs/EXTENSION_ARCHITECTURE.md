@@ -13,7 +13,7 @@ RaBiTool is a no-build Chrome Manifest V3 extension.
 - `project/background/clipboard.js`: offscreen clipboard helper for Excel Web paste/import flows.
 - `project/background/xlsx_report_parser.js`: direct XLSX ZIP/XML reader and 9-column RA report normalizer.
 - `project/background/reclame_aqui.js`: Reclame Aqui source-page automation and current XLSX download detection test path.
-- `project/background/excel_sheet.js`: Excel Web no-focus dry-run inspection and future paste support.
+- `project/background/excel_sheet.js`: Excel Web worksheet guard, keyboard/debugger Find navigation, overlap validation, TSV preparation, clipboard copy, and one-block paste.
 - `project/background/ra_bi_workflow.js`: workflow action names and orchestration scaffold.
 - `project/background/runtime.js`: Chrome runtime listeners, workflow registration map, popup/settings message routing, and side-tab helper.
 - `project/content.js`: injected into matching pages. Owns popup creation/binding, popup position, extension toggle behavior, shortcut handling, and workflow button status.
@@ -57,7 +57,7 @@ The popup is compact and fixed-position:
 - loading/current-process line;
 - stacked warning/result notices.
 
-The tracked-tab buttons are outline-only: green/check means ready, blue/spinner means checking/loading, and red/X means blocked or login/permisson needed. The `RA > BI` button currently calls the first RA export/download workflow and shows structured responses. The current test build stops after Chrome reports the XLSX download as complete; parser/reconciliation/Excel paste resume only after the owner confirms this download leg is solid. The default placement is top-right; dragging saves the position, while browser resize/zoom should only keep the popup visible and should not save a new position.
+The tracked-tab buttons are outline-only: green/check means ready, blue/spinner means checking/loading, and red/X means blocked or login/permisson needed. The `RA > BI` button calls the RA export/download/parser and guarded Excel Web keyboard paste workflow. The `Test Paste` button is a temporary development shortcut that skips HugMe and runs the Excel phase against an ignored local test XLSX. The default placement is top-right; dragging saves the position, while browser resize/zoom should only keep the popup visible and should not save a new position.
 
 ## Permissions
 
@@ -85,6 +85,7 @@ This project intentionally uses browser UI automation instead of API integration
 - keep selectors documented;
 - prefer explicit owner-confirmed button labels/selectors;
 - use clipboard/import only where Chrome and Excel Web allow it reliably.
+- for the current Excel Web write path, explicitly focus the Excel tab before keyboard/debugger actions and clearly show that step in popup status text.
 
 ## Local Release Exports
 

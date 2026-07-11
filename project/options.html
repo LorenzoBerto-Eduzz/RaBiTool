@@ -9,8 +9,8 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: #ffffff;
+      color: #14532d;
       min-height: 100vh;
       display: flex;
       align-items: flex-start;
@@ -29,13 +29,13 @@
     .header h1 {
       font-size: 22px;
       font-weight: 700;
-      color: #f1f5f9;
+      color: #047857;
       margin-bottom: 0;
     }
-    .header p { font-size: 13px; color: #64748b; }
+    .header p { font-size: 13px; color: #16a34a; }
     .card {
-      background: #1e293b;
-      border: 1px solid #334155;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
       border-radius: 12px;
       padding: 20px 24px;
       margin-bottom: 18px;
@@ -43,7 +43,7 @@
     .card h2 {
       font-size: 11px;
       font-weight: 700;
-      color: #64748b;
+      color: #047857;
       text-transform: uppercase;
       letter-spacing: 0.07em;
       margin-bottom: 16px;
@@ -53,10 +53,11 @@
     .slider {
       position: absolute;
       inset: 0;
-      background: #7f1d1d;
+      background: #fef2f2;
+      border: 1.5px solid #fecaca;
       border-radius: 24px;
       cursor: pointer;
-      transition: background .2s;
+      transition: background .2s, border-color .2s;
     }
     .slider::before {
       content: 'off';
@@ -64,10 +65,11 @@
       width: 24px;
       height: 24px;
       border-radius: 50%;
-      background: #ef4444;
-      color: #0f172a;
+      background: #dc2626;
+      color: #ffffff;
       left: 2px;
-      top: 2px;
+      top: 50%;
+      transform: translateY(-50%);
       transition: transform .2s, background .2s;
       display: grid;
       place-items: center;
@@ -77,17 +79,23 @@
       letter-spacing: 0;
       text-transform: lowercase;
     }
-    .switch input:checked + .slider { background: #14532d; }
+    .switch input:checked + .slider {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
     .switch input:checked + .slider::before {
       content: 'on';
-      background: #22c55e;
-      transform: translateX(30px);
+      background: #16a34a;
+      transform: translate(30px, -50%);
     }
-    .switch:not(.is-ready) .slider { background: transparent !important; }
+    .switch:not(.is-ready) .slider {
+      background: transparent !important;
+      border-color: transparent !important;
+    }
     .switch:not(.is-ready) .slider::before {
       content: '' !important;
       background: transparent !important;
-      transform: none !important;
+      transform: translateY(-50%) !important;
     }
     .no-toggle-anim .slider,
     .no-toggle-anim .slider::before { transition: none !important; }
@@ -96,11 +104,11 @@
       align-items: center;
       justify-content: space-between;
       padding: 9px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      border-bottom: 1px solid #dcfce7;
       gap: 12px;
     }
     .sc-row:last-child { border-bottom: none; }
-    .sc-name { font-size: 13px; color: #cbd5e1; }
+    .sc-name { font-size: 13px; color: #047857; }
     .sc-keys {
       display: flex;
       gap: 3px;
@@ -109,8 +117,8 @@
       flex-shrink: 0;
     }
     kbd {
-      background: #0f172a;
-      border: 1px solid #334155;
+      background: #047857;
+      border: 1px solid #047857;
       border-radius: 5px;
       padding: 3px 8px;
       height: 23px;
@@ -119,7 +127,7 @@
       align-items: center;
       font-size: 11px;
       font-family: monospace;
-      color: #e2e8f0;
+      color: #ffffff;
       white-space: nowrap;
       line-height: 1;
     }
@@ -146,7 +154,7 @@
       border-radius: 7px;
       padding: 2px;
       margin: -2px;
-      color: #e2e8f0;
+      color: #047857;
       min-height: 0;
       display: inline-flex;
       align-items: center;
@@ -161,14 +169,14 @@
     }
     .sc-key-btn:hover,
     .sc-key-btn.is-capturing {
-      outline-color: #e2e8f0;
-      color: #93c5fd;
+      outline-color: #047857;
+      color: #047857;
     }
     .sc-key-btn.is-empty {
-      background: #0f172a;
-      border: 1px solid #334155;
+      background: #047857;
+      border: 1px solid #047857;
       border-radius: 5px;
-      color: #60a5fa;
+      color: #ffffff;
       font-size: 11px;
       font-family: monospace;
       min-height: 23px;
@@ -181,7 +189,7 @@
     }
     .plus {
       font-size: 11px;
-      color: #e2e8f0;
+      color: #047857;
       font-weight: 700;
     }
     .is-hidden { display: none !important; }

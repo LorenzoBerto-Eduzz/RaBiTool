@@ -1,6 +1,7 @@
 // Runtime message routing and workflow registration.
 const WORKFLOW_RUNNERS = {
   [RABITOOL_ACTIONS.START_RA_TO_EXCEL]: startRaToExcelWorkflow,
+  [RABITOOL_ACTIONS.TEST_PASTE_FIXED_XLSX]: testPasteFixedXlsxWorkflow,
   [RABITOOL_ACTIONS.PREPARE_RA_EXPORT]: prepareRaExportWorkflow,
   [RABITOOL_ACTIONS.CHECK_RA_DOWNLOAD]: checkRaDownloadWorkflow,
   [RABITOOL_ACTIONS.PREPARE_EXCEL_IMPORT]: prepareExcelImportWorkflow

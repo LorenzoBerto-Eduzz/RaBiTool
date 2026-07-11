@@ -1,4 +1,23 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.action === 'OFFSCREEN_READ_TEXT') {
+    (async () => {
+      if (!navigator.clipboard?.readText) {
+        sendResponse({ ok: false, reason: 'navigator.clipboard.readText indisponivel no documento offscreen.' });
+        return;
+      }
+      try {
+        const text = await navigator.clipboard.readText();
+        sendResponse({ ok: true, text: String(text || '') });
+      } catch (error) {
+        sendResponse({
+          ok: false,
+          reason: `navigator.clipboard.readText falhou: ${error?.name || 'Error'} ${error?.message || ''}`.trim()
+        });
+      }
+    })();
+    return true;
+  }
+
   if (message?.action !== 'OFFSCREEN_COPY_TEXT') return false;
 
   const text = String(message.value || '');

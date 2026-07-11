@@ -357,13 +357,15 @@ async function runOptionsWorkflowButton() {
   }
 }
 
-function saveEnabled(enabled) {
-  setOptionsPopupVisible(!!enabled);
-  chrome.storage.local.get(SETTINGS_KEY, (data) => {
-    const settings = withDefaultSettings(data?.[SETTINGS_KEY]);
-    settings.enabled = !!enabled;
-    chrome.storage.local.set({ enabled: !!enabled, [SETTINGS_KEY]: settings });
-  });
+async function saveEnabled(enabled) {
+  const nextEnabled = !!enabled;
+  setOptionsPopupVisible(nextEnabled);
+  const response = await sendRuntimeMessage({ action: 'SET_ENABLED', enabled: nextEnabled });
+  if (!response?.ok) {
+    toggle.checked = !nextEnabled;
+    setOptionsPopupVisible(!nextEnabled);
+    setOptionsPopupStatus('Nao foi possivel atualizar o estado da extensao.', 'error');
+  }
 }
 
 function loadEnabled() {

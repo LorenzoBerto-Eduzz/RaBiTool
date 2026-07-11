@@ -116,9 +116,9 @@ For the current implementation phase, RaBiTool opens/reuses the RA and mother-sh
 - Empresa dropdown: `select.empresa`, choose label `Eduzz`.
 - Titulo field: `input.titulo`, fill `RaBiToolRelatoriohhmmssddmmyy` where the numeric suffix is execution time in `hhmmssddmmyy` format.
 - Periodo mode: choose radio `#periodoADefinir` / label `A definir`.
-- Periodo start field: `#starty`, type/paste date as `ddmmyyyy`, set to current execution date minus 45 days, then press Enter so HugMe formats slashes.
-- Periodo end field: `#endy`, type/paste date as `ddmmyyyy`, set to current execution date, then press Enter.
-- Date fields must be validated before report generation: the tool should block if either field remains as raw digits and does not become `dd/mm/yyyy` after Enter/blur/change events.
+- Periodo start field: `#starty`, fill date directly as `dd/mm/yyyy`, set to current execution date minus 45 days.
+- Periodo end field: `#endy`, fill date directly as `dd/mm/yyyy`, set to current execution date.
+- Date fields must be validated before report generation: the tool should block if either field is not exactly in `dd/mm/yyyy` format with the expected digits.
 - Ordenacao field: `select.order`, owner asked for `Data Reclamação`.
 - Ordenacao type: `select.order-type`, owner corrected this to `ascendente` so the report has oldest rows first and latest rows at the bottom, matching the mother sheet.
 - Personalizar colunas: checkbox `#selAll`, select all columns.
@@ -164,9 +164,9 @@ After submitting `Gerar relatório`, the next source automation milestone is:
 4. When the item shows a visible `Download` button, click that button for the matching item only.
 5. Use Chrome downloads tracking to detect the resulting XLSX download and associate it with this run by matching the generated title.
 6. The downloaded file becomes the incoming report for parser/reconciliation.
-7. The current test build intentionally stops here after Chrome reports the XLSX download completed. Existing parser/reconciliation/Excel inspection modules remain in the codebase, but are deferred until the owner confirms the download leg is solid.
+7. The current build fetches/reads the completed XLSX, validates required headers/rows/unique IDs/ascending dates, stores normalized rows in service-worker memory, validates the active Excel worksheet, validates the overlap through keyboard-driven Excel Find/copy steps, and pastes one prepared TSV block when safe.
 
-Current implementation choice: poll the page every 2 seconds for up to 420 seconds. For the current test build, stop with success once Chrome reports the XLSX download completed. Parser, reconciliation, and Excel paste resume after the owner confirms the download leg is solid.
+Current implementation choice: poll the page every 2 seconds for up to 420 seconds. The flow now proceeds through XLSX validation and the guarded Excel Web keyboard/debugger phase. Status text should show `Preparando para gerar relatorio...` before generation and `Processando relatorio...` while the report item is processing.
 
 ## Pending Destination Details
 
@@ -179,19 +179,25 @@ Current implementation choice: poll the page every 2 seconds for up to 420 secon
 - Rows to skip or keep: do not touch unrelated historical rows before the affected window.
 - Success validation: still pending; should verify row count/anchor and allow one Excel Web `Ctrl+Z` recovery for the single paste.
 
-## Excel Web No-Focus Dry Run
+## Excel Web Keyboard Paste Phase
 
-The available Excel inspection module attempts a conservative dry run after report parsing, but the current download-test build does not call this stage yet:
+Excel Web did not reliably expose enough worksheet/cell data to the extension in the background, so the current tested write path uses user-like keyboard automation through Chrome Debugger. This phase intentionally focuses the Excel Web tab while it works.
 
-1. Reuse the tracked Excel Web tab without activating/focusing it.
-2. Inject an inspection script into that tab.
-3. Detect the configured worksheet name in page text/title.
-4. Collect readable grid cells from accessible DOM attributes such as `role="gridcell"`, `aria-rowindex`, and `aria-colindex`.
-5. Confirm the 9 required mother-sheet headers by cell position, not just loose page text.
-6. Inspect visible data rows and try to find the oldest report `Id HugMe` as the replacement anchor.
-7. If any of those proofs fail, block with a specific stage/reason.
+The current sequence is:
 
-Known limitation: Excel Web may virtualize or canvas-render the workbook. If it does not expose enough row/cell data to a background-tab content script, the dry run will correctly block. Later fallback options are Excel Web search/find automation, a controlled focus-required paste flow, workbook export/import, or a user-approved file/clipboard bridge.
+1. Activate/focus the tracked Excel Web tab.
+2. Confirm the active worksheet tab is exactly the configured worksheet, currently `Relatorio de Tickets`. The primary signal is Excel Web's sheet tab bar with `role="tab"` and `aria-selected="true"`; if the active worksheet cannot be proven, block before touching data.
+3. Use `Ctrl+F` in Excel Web, paste the oldest incoming report `Id HugMe`, and press Enter.
+4. Close Find, copy the selected cell, and verify the selected value equals the expected oldest report ID.
+5. Probe the cell below. If it is blank, the anchor is also the current mother-sheet tail and overlap count is 1.
+6. If there is data below, return to the anchor, run `Ctrl+Shift+Down`, copy the selected ID range, and count/validate the mother-sheet overlap IDs.
+7. Move to the latest selected mother-sheet ID, copy it, and confirm it matches the last copied range ID.
+8. Find that latest mother-sheet ID inside the parsed report and count report rows from the report anchor through that same ID.
+9. If mother-sheet overlap count and report overlap count differ, or any ID differs in order, block before paste.
+10. Re-find the oldest report ID in Excel Web.
+11. Copy the prepared 9-column TSV and send one `Ctrl+V`, followed by Enter, so the intended recovery path is one Excel Web `Ctrl+Z`.
+
+Known limitation: this UI-based Excel phase needs focus because Excel Web's find, selection, copy, and paste behavior is tied to the active workbook surface and browser clipboard focus rules. A fully no-focus write would require a different integration path such as Microsoft Graph or another API, which the owner has explicitly not chosen for this project.
 
 ## Pending Reconciliation Rules
 
@@ -213,6 +219,7 @@ Known limitation: Excel Web may virtualize or canvas-render the workbook. If it 
 - What should happen when the report includes older/newer rows outside the intended filter span?
 - Blank optional fields are allowed in mapped columns and should be pasted as blanks because the report is the definitive source for the replacement range.
 - Should the tool require a preview/confirmation before applying changes?
+- Current owner alignment: once the guards pass, the Excel paste should proceed automatically and quickly. The popup should keep the active step explicit so the focus change to Excel is understandable rather than surprising.
 
 ## Pending Row Mapping Details
 

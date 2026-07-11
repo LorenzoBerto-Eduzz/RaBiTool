@@ -1,6 +1,9 @@
 // Reclame Aqui source-page automation.
 const RA_EXPORT_URL_FRAGMENT = 'app.hugme.com.br/app.html#/dados/tickets/exportar';
 const EXCEL_HOST_HINTS = ['eduzz.sharepoint.com', 'excel.officeapps.live.com', 'officeapps.live.com'];
+const RABI_FIXED_TEST_XLSX_FILENAME = '966_rabitoolrelatorio103600110726_1783777020004.xlsx';
+const RABI_FIXED_TEST_XLSX_PATH = 'C:\\C.Nvme\\Downloads\\966_rabitoolrelatorio103600110726_1783777020004.xlsx';
+const RABI_FIXED_TEST_XLSX_RESOURCE = `local_test_data/${RABI_FIXED_TEST_XLSX_FILENAME}`;
 
 function getStoredSettings() {
   return new Promise((resolve) => {
@@ -62,6 +65,73 @@ async function findRequiredWorkflowTabs(settings) {
   }
 
   return { ok: true, raTab: raTabs[0], excelTab: excelTabs[0] };
+}
+
+async function findExcelWorkflowTab(settings) {
+  const tabs = await queryTabs({});
+  const excelTab = tabs.find((tab) => isExcelMotherSheetTab(tab, settings)) || null;
+  if (!excelTab) {
+    return {
+      ok: false,
+      stage: 'tabs',
+      reason: 'Aba da Planilha Mae nao preparada'
+    };
+  }
+  return { ok: true, excelTab };
+}
+
+function normalizeDownloadPath(value) {
+  return String(value || '').replace(/\//g, '\\').toLowerCase();
+}
+
+async function findFixedTestDownload() {
+  if (!chrome.downloads?.search) {
+    return { ok: false, stage: 'download', reason: 'Chrome downloads API is unavailable.' };
+  }
+
+  return new Promise((resolve) => {
+    chrome.downloads.search({ limit: 200, orderBy: ['-startTime'] }, (downloads) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, stage: 'download', reason: chrome.runtime.lastError.message });
+        return;
+      }
+
+      const expectedPath = normalizeDownloadPath(RABI_FIXED_TEST_XLSX_PATH);
+      const expectedName = RABI_FIXED_TEST_XLSX_FILENAME.toLowerCase();
+      const match = (downloads || []).find((item) => {
+        const filename = normalizeDownloadPath(item.filename);
+        return filename === expectedPath || filename.endsWith(`\\${expectedName}`);
+      });
+
+      if (!match) {
+        resolve({
+          ok: false,
+          stage: 'download',
+          reason: `Nao encontrei no historico do Chrome downloads o XLSX fixo: ${RABI_FIXED_TEST_XLSX_PATH}`
+        });
+        return;
+      }
+
+      if (match.state !== 'complete') {
+        resolve({
+          ok: false,
+          stage: 'download',
+          reason: `O XLSX fixo existe no Chrome downloads, mas nao esta completo: ${match.state || 'estado desconhecido'}.`
+        });
+        return;
+      }
+
+      resolve({
+        ok: true,
+        stage: 'download',
+        downloadId: match.id,
+        filename: match.filename,
+        url: match.url,
+        mime: match.mime,
+        state: match.state
+      });
+    });
+  });
 }
 
 async function waitForMatchingDownload(title, clickedAtMs, timeoutMs) {
@@ -195,6 +265,10 @@ function setupRaReportFormInPage(args) {
     return String(value || '').trim() === `${expectedDigits.slice(0, 2)}/${expectedDigits.slice(2, 4)}/${expectedDigits.slice(4)}`;
   }
 
+  function formatDateForHugMe(value) {
+    return `${value.slice(0, 2)}/${value.slice(2, 4)}/${value.slice(4)}`;
+  }
+
   function selectByLabel(select, label) {
     const expected = normalizeComparable(label);
     const option = Array.from(select.options).find((item) => {
@@ -208,39 +282,7 @@ function setupRaReportFormInPage(args) {
     }
   }
 
-  function keyCodeFor(key) {
-    if (key === 'Enter') return 13;
-    if (/^\d$/.test(key)) return key.charCodeAt(0);
-    return 0;
-  }
-
-  function sendKeyboardEvent(element, type, key) {
-    const code = keyCodeFor(key);
-    const event = new KeyboardEvent(type, {
-      key,
-      code: key === 'Enter' ? 'Enter' : `Digit${key}`,
-      bubbles: true,
-      cancelable: true,
-      composed: true
-    });
-    try {
-      Object.defineProperty(event, 'keyCode', { get: () => code });
-      Object.defineProperty(event, 'which', { get: () => code });
-      Object.defineProperty(event, 'charCode', { get: () => (type === 'keypress' ? code : 0) });
-    } catch {
-      // Some browsers keep these readonly. The KeyboardEvent key/code still carries intent.
-    }
-    element.dispatchEvent(event);
-    return !event.defaultPrevented;
-  }
-
-  function sendKey(element, key) {
-    sendKeyboardEvent(element, 'keydown', key);
-    sendKeyboardEvent(element, 'keypress', key);
-    sendKeyboardEvent(element, 'keyup', key);
-  }
-
-  function setText(input, value, { pressEnter = false } = {}) {
+  function setText(input, value) {
     if (input.value !== value) {
       input.focus();
       input.value = value;
@@ -249,62 +291,34 @@ function setupRaReportFormInPage(args) {
     input.value = value;
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    if (pressEnter) sendKey(input, 'Enter');
     input.dispatchEvent(new Event('blur', { bubbles: true }));
   }
 
-  function clearInputLikeUser(input) {
+  async function setDateText(input, value, label) {
+    const formatted = formatDateForHugMe(value);
     input.focus();
     input.select?.();
     input.value = '';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  function insertDigitLikeUser(input, digit) {
-    sendKeyboardEvent(input, 'keydown', digit);
-    sendKeyboardEvent(input, 'keypress', digit);
-    const beforeInput = new InputEvent('beforeinput', {
+    await sleep(80);
+    input.value = formatted;
+    input.dispatchEvent(new InputEvent('input', {
       bubbles: true,
       cancelable: true,
       composed: true,
-      data: digit,
-      inputType: 'insertText'
-    });
-    input.dispatchEvent(beforeInput);
-    if (!beforeInput.defaultPrevented) {
-      const start = input.selectionStart ?? input.value.length;
-      const end = input.selectionEnd ?? start;
-      input.setRangeText?.(digit, start, end, 'end');
-      if (!input.setRangeText) input.value = `${input.value || ''}${digit}`;
-    }
-    input.dispatchEvent(new InputEvent('input', {
-      bubbles: true,
-      composed: true,
-      data: digit,
+      data: formatted,
       inputType: 'insertText'
     }));
-    sendKeyboardEvent(input, 'keyup', digit);
-  }
-
-  async function setDateText(input, value, label) {
-    clearInputLikeUser(input);
-    for (const digit of value) {
-      insertDigitLikeUser(input, digit);
-      await sleep(35);
-    }
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    await sleep(120);
-    sendKey(input, 'Enter');
-    await sleep(700);
-    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(250);
     input.dispatchEvent(new Event('blur', { bubbles: true }));
-    await sleep(500);
+    await sleep(250);
     if (normalizeDateValue(input.value) !== value) {
       throw new Error(`Campo ${label} nao confirmou a data ${value}. Valor atual: ${input.value || 'vazio'}.`);
     }
     if (!isFormattedDate(input.value, value)) {
-      throw new Error(`Campo ${label} recebeu ${value}, mas o HugMe nao formatou/confirmou com Enter. Valor atual: ${input.value || 'vazio'}.`);
+      throw new Error(`Campo ${label} nao ficou no formato ${formatted}. Valor atual: ${input.value || 'vazio'}.`);
     }
   }
 
@@ -473,7 +487,7 @@ async function waitForRaReportReady(tabId, title, pollingMs, timeoutMs) {
   while (Date.now() < deadline) {
     await setRaBiWorkflowStatus({
       running: true,
-      activeText: 'Aguardando relatorio processar no HugMe...'
+      activeText: 'Processando relat\u00f3rio...'
     });
     const inspection = await runFunctionInTab(tabId, inspectRaReportItemInPage, [title]);
     if (!inspection.ok) return inspection;
@@ -507,7 +521,7 @@ async function prepareReclameAquiExport() {
   const processingTimeoutMs = 420000;
   const downloadTimeoutMs = Number(settings.workflow?.downloadTimeoutMs) || 60000;
 
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Preparando relatorio no HugMe...' });
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Preparando para gerar relat\u00f3rio...' });
   const setup = await runFunctionInTab(tabs.raTab.id, setupRaReportFormInPage, [{
     companyLabel: 'Eduzz',
     title,
@@ -534,15 +548,136 @@ async function prepareReclameAquiExport() {
     return { ok: false, stage: 'download', reason: download.reason || 'Download nao encontrado.' };
   }
 
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Lendo e validando XLSX...' });
+  const parsed = await fetchAndParseRaReportDownload(download);
+  if (!parsed.ok) {
+    return {
+      ...parsed,
+      title,
+      filename: download.filename,
+      downloadId: download.downloadId
+    };
+  }
+
+  setLatestParsedRaReport({
+    title,
+    download,
+    parsedAt: new Date().toISOString(),
+    columns: parsed.columns,
+    sheetPath: parsed.sheetPath,
+    headerRowNumber: parsed.headerRowNumber,
+    rowCount: parsed.rowCount,
+    firstId: parsed.firstId,
+    lastId: parsed.lastId,
+    firstDate: parsed.firstDate,
+    lastDate: parsed.lastDate,
+    rows: parsed.rows
+  });
+
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Validando Planilha Mae...' });
+  const excelResult = await applyExcelWorkbookUpdate(tabs.excelTab.id);
+  if (!excelResult.ok) {
+    return {
+      ...excelResult,
+      title,
+      filename: download.filename,
+      reportRowCount: parsed.rowCount,
+      reportFirstId: parsed.firstId,
+      reportLastId: parsed.lastId,
+      reportFirstDate: parsed.firstDate,
+      reportLastDate: parsed.lastDate
+    };
+  }
+
   return {
     ok: true,
-    stage: 'download',
+    stage: 'excel-paste',
     title,
     startDate,
     endDate,
     downloadId: download.downloadId,
     filename: download.filename,
-    message: `XLSX baixado e detectado: ${download.filename || title}`
+    reportRowCount: parsed.rowCount,
+    reportFirstId: parsed.firstId,
+    reportLastId: parsed.lastId,
+    reportFirstDate: parsed.firstDate,
+    reportLastDate: parsed.lastDate,
+    excelResult,
+    message: `XLSX validado e Planilha Mae atualizada: ${parsed.rowCount} linhas. IDs ${parsed.firstId} -> ${parsed.lastId}.`
+  };
+}
+
+async function testPasteFixedDownloadedReport() {
+  const settings = await getStoredSettings();
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Abrindo Planilha Mae...' });
+  const ensured = await ensureWorkspaceTab('bi', null, 1);
+  const tabs = ensured.ok
+    ? { ok: true, excelTab: ensured.tab }
+    : await findExcelWorkflowTab(settings);
+  if (!tabs.ok) return tabs;
+
+  const download = {
+    ok: true,
+    stage: 'download',
+    downloadId: 'fixed-test-resource',
+    filename: RABI_FIXED_TEST_XLSX_PATH,
+    resourcePath: RABI_FIXED_TEST_XLSX_RESOURCE
+  };
+
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Lendo e validando XLSX fixo...' });
+  const parsed = await fetchAndParsePackagedRaReport(RABI_FIXED_TEST_XLSX_RESOURCE);
+  if (!parsed.ok) {
+    return {
+      ...parsed,
+      title: 'Test Paste',
+      filename: download.filename,
+      downloadId: download.downloadId
+    };
+  }
+
+  setLatestParsedRaReport({
+    title: 'Test Paste',
+    download,
+    parsedAt: new Date().toISOString(),
+    columns: parsed.columns,
+    sheetPath: parsed.sheetPath,
+    headerRowNumber: parsed.headerRowNumber,
+    rowCount: parsed.rowCount,
+    firstId: parsed.firstId,
+    lastId: parsed.lastId,
+    firstDate: parsed.firstDate,
+    lastDate: parsed.lastDate,
+    rows: parsed.rows
+  });
+
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Validando Planilha Mae...' });
+  const excelResult = await applyExcelWorkbookUpdate(tabs.excelTab.id);
+  if (!excelResult.ok) {
+    return {
+      ...excelResult,
+      title: 'Test Paste',
+      filename: download.filename,
+      reportRowCount: parsed.rowCount,
+      reportFirstId: parsed.firstId,
+      reportLastId: parsed.lastId,
+      reportFirstDate: parsed.firstDate,
+      reportLastDate: parsed.lastDate
+    };
+  }
+
+  return {
+    ok: true,
+    stage: 'excel-paste',
+    title: 'Test Paste',
+    downloadId: download.downloadId,
+    filename: download.filename,
+    reportRowCount: parsed.rowCount,
+    reportFirstId: parsed.firstId,
+    reportLastId: parsed.lastId,
+    reportFirstDate: parsed.firstDate,
+    reportLastDate: parsed.lastDate,
+    excelResult,
+    message: `Teste colou ${parsed.rowCount} linhas do XLSX fixo. IDs ${parsed.firstId} -> ${parsed.lastId}.`
   };
 }
 
