@@ -37,6 +37,9 @@ let workspaceRefreshTimer = null;
 let optionsWorkflowRunning = false;
 let lastOptionsWorkflowStatus = null;
 let lastOptionsWorkspaceStatus = null;
+let lastOptionsWorkspaceRenderSignature = '';
+let lastOptionsRenderedNoticesSignature = '';
+let lastOptionsProgressSignature = '';
 
 const SHORTCUT_WARNING_ICON_HTML = '<span class="sc-add-warning" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L1 21h22L12 3zm1 13h-2v-5h2v5zm0 3h-2v-2h2v2z"/></svg></span>';
 
@@ -105,6 +108,9 @@ function ensureOptionsPopup() {
   optionsPopup.innerHTML = window.RaBiToolUI?.getMarkup?.() || '';
   document.body.appendChild(optionsPopup);
   optionsPopup.style.visibility = 'visible';
+  lastOptionsWorkspaceRenderSignature = '';
+  lastOptionsRenderedNoticesSignature = '';
+  lastOptionsProgressSignature = '';
 
   bindOptionsPopupDragging();
   bindOptionsPopupButtons();
@@ -207,7 +213,9 @@ function bindOptionsPopupButtons() {
     window.focus();
   });
 
-  optionsPopup?.querySelector('#csh-btn-run')?.addEventListener('click', () => runOptionsWorkflowButton());
+  optionsPopup?.querySelector('#csh-btn-run')?.addEventListener('click', () => {
+    runOptionsWorkflowButton('RABITOOL_START_RA_TO_EXCEL', 'Verificando abas...');
+  });
   optionsPopup?.querySelector('#csh-btn-tab-ra')?.addEventListener('click', () => focusOptionsWorkspaceTab('ra'));
   optionsPopup?.querySelector('#csh-btn-tab-bi')?.addEventListener('click', () => focusOptionsWorkspaceTab('bi'));
 }
@@ -231,12 +239,33 @@ function optionNoticeIcon(level) {
   return 'i';
 }
 
+function uniqueOptionsNotices(notices = []) {
+  const seen = new Set();
+  const unique = [];
+  for (const item of notices) {
+    const text = String(item?.text || '').trim();
+    if (!text) continue;
+    const level = item.level || 'info';
+    const key = `${level}:${text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ level, text });
+  }
+  return unique;
+}
+
+function optionsNoticeSignature(notices = []) {
+  return JSON.stringify(uniqueOptionsNotices(notices));
+}
+
 function setOptionsPopupNotices(notices = []) {
   const status = optionsPopup?.querySelector('#csh-status');
   if (!status) return;
+  const signature = optionsNoticeSignature(notices);
+  if (signature === lastOptionsRenderedNoticesSignature) return;
+  lastOptionsRenderedNoticesSignature = signature;
   status.textContent = '';
-  notices
-    .filter((item) => item && String(item.text || '').trim())
+  uniqueOptionsNotices(notices)
     .forEach((item) => {
       const row = document.createElement('div');
       row.className = 'csh-status-item';
@@ -258,13 +287,17 @@ function setOptionsPopupStatus(text, level = 'info') {
 function setOptionsPopupProgress(active, text = '') {
   const progress = optionsPopup?.querySelector('#csh-progress');
   const progressText = optionsPopup?.querySelector('#csh-progress-text');
-  const runButton = optionsPopup?.querySelector('#csh-btn-run');
+  const buttons = optionsPopup?.querySelectorAll('.csh-run-btn') || [];
+  const nextText = text || 'Aguardando...';
+  const signature = JSON.stringify({ active: !!active, text: nextText });
+  if (signature === lastOptionsProgressSignature) return;
+  lastOptionsProgressSignature = signature;
   if (progress) progress.hidden = !active;
-  if (progressText) progressText.textContent = text || 'Aguardando...';
-  if (runButton) {
-    runButton.disabled = !!active;
-    runButton.dataset.running = active ? 'true' : 'false';
-  }
+  if (progressText) progressText.textContent = nextText;
+  buttons.forEach((button) => {
+    button.disabled = !!active;
+    button.dataset.running = active ? 'true' : 'false';
+  });
 }
 
 function setOptionsWorkspaceButton(kind, info = {}) {
@@ -272,9 +305,11 @@ function setOptionsWorkspaceButton(kind, info = {}) {
   const icon = optionsPopup?.querySelector(`.csh-tab-icon[data-kind="${kind}"]`);
   if (!button || !icon) return;
   const state = info.state || 'unknown';
-  button.dataset.state = state === 'unknown' ? 'checking' : state;
-  button.title = info.reason || (state === 'ready' ? 'Pronto' : 'Verificando');
-  icon.textContent = '';
+  const nextState = state === 'unknown' ? 'checking' : state;
+  const nextTitle = info.reason || (state === 'ready' ? 'Pronto' : 'Verificando');
+  if (button.dataset.state !== nextState) button.dataset.state = nextState;
+  if (button.title !== nextTitle) button.title = nextTitle;
+  if (icon.textContent) icon.textContent = '';
 }
 
 function optionsWorkspaceNotices(status) {
@@ -310,10 +345,29 @@ function renderOptionsWorkspaceStatus(status) {
   renderOptionsCombinedNotices();
 }
 
+function optionsWorkspaceStatusSignature(status) {
+  return JSON.stringify({
+    ra: status?.ra ? {
+      state: status.ra.state || '',
+      reason: status.ra.reason || '',
+      tabId: status.ra.tabId || null
+    } : null,
+    bi: status?.bi ? {
+      state: status.bi.state || '',
+      reason: status.bi.reason || '',
+      tabId: status.bi.tabId || null
+    } : null
+  });
+}
+
 async function refreshOptionsWorkspaceStatus() {
   if (!optionsPopup || optionsPopup.style.display === 'none') return;
   const status = await sendRuntimeMessage({ action: 'GET_WORKSPACE_STATUS' });
-  if (status?.ok) renderOptionsWorkspaceStatus(status);
+  if (!status?.ok) return;
+  const signature = optionsWorkspaceStatusSignature(status);
+  if (signature === lastOptionsWorkspaceRenderSignature) return;
+  lastOptionsWorkspaceRenderSignature = signature;
+  renderOptionsWorkspaceStatus(status);
 }
 
 function startOptionsWorkspaceRefresh() {
@@ -343,11 +397,11 @@ function refreshOptionsWorkflowStatus() {
   });
 }
 
-async function runOptionsWorkflowButton() {
+async function runOptionsWorkflowButton(action, activeText = 'Verificando abas...') {
   optionsWorkflowRunning = true;
-  setOptionsPopupProgress(true, 'Verificando abas...');
+  setOptionsPopupProgress(true, activeText);
   setOptionsPopupNotices([]);
-  const response = await sendRuntimeMessage({ action: 'RABITOOL_START_RA_TO_EXCEL' });
+  const response = await sendRuntimeMessage({ action });
   refreshOptionsWorkflowStatus();
   if (!response) {
     optionsWorkflowRunning = false;
@@ -360,6 +414,11 @@ async function runOptionsWorkflowButton() {
 async function saveEnabled(enabled) {
   const nextEnabled = !!enabled;
   setOptionsPopupVisible(nextEnabled);
+  if (nextEnabled) {
+    requestAnimationFrame(() => {
+      optionsPopup?.querySelector('#csh-btn-run')?.focus({ preventScroll: true });
+    });
+  }
   const response = await sendRuntimeMessage({ action: 'SET_ENABLED', enabled: nextEnabled });
   if (!response?.ok) {
     toggle.checked = !nextEnabled;

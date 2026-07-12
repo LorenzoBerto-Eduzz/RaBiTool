@@ -17,6 +17,8 @@ if (Test-Path -LiteralPath $export) { Remove-Item -LiteralPath $export -Recurse 
 if ((-not $Zip) -and (Test-Path -LiteralPath $zipPath)) { Remove-Item -LiteralPath $zipPath -Force }
 
 Copy-Item -LiteralPath $project -Destination $export -Recurse
+$devData = Join-Path $export "local_test_data"
+if (Test-Path -LiteralPath $devData) { Remove-Item -LiteralPath $devData -Recurse -Force }
 Write-Host "Created $export"
 
 if ($Zip) {

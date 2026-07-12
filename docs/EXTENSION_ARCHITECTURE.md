@@ -9,11 +9,11 @@ RaBiTool is a no-build Chrome Manifest V3 extension.
 - `project/background/config.js`: shared settings key and default settings.
 - `project/background/settings.js`: settings defaults, storage merge helpers, and install/update option opening.
 - `project/background/chrome_tabs.js`: Chrome tab/window/query/injection helpers.
-- `project/background/workspace_tabs.js`: activation-time RA/BI tab opening, tracking, readiness status, and explicit focus helpers.
+- `project/background/workspace_tabs.js`: reserved RA/BI tab opening, current-load tab-group tracking, readiness status, and explicit focus helpers.
 - `project/background/clipboard.js`: offscreen clipboard helper for Excel Web paste/import flows.
 - `project/background/xlsx_report_parser.js`: direct XLSX ZIP/XML reader and 9-column RA report normalizer.
-- `project/background/reclame_aqui.js`: Reclame Aqui source-page automation and current XLSX download detection test path.
-- `project/background/excel_sheet.js`: Excel Web worksheet guard, keyboard/debugger Find navigation, overlap validation, TSV preparation, clipboard copy, and one-block paste.
+- `project/background/reclame_aqui.js`: Reclame Aqui source-page automation, HugMe page-side report/download watcher, and Chrome XLSX download detection.
+- `project/background/excel_sheet.js`: Excel Web worksheet guard, keyboard/debugger Find navigation, anchor verification, TSV preparation, clipboard copy, and one-block paste.
 - `project/background/ra_bi_workflow.js`: workflow action names and orchestration scaffold.
 - `project/background/runtime.js`: Chrome runtime listeners, workflow registration map, popup/settings message routing, and side-tab helper.
 - `project/content.js`: injected into matching pages. Owns popup creation/binding, popup position, extension toggle behavior, shortcut handling, and workflow button status.
@@ -42,7 +42,7 @@ When the exact page steps are known, implement them as named helpers with clear 
 5. row parsing/preparation;
 6. Excel tab discovery without activation when possible;
 7. destination range inspection/preparation;
-8. import/paste/replace/append action;
+8. import/paste/replace action;
 9. status reporting.
 
 ## Current Popup
@@ -57,7 +57,13 @@ The popup is compact and fixed-position:
 - loading/current-process line;
 - stacked warning/result notices.
 
-The tracked-tab buttons are outline-only: green/check means ready, blue/spinner means checking/loading, and red/X means blocked or login/permisson needed. The `RA > BI` button calls the RA export/download/parser and guarded Excel Web keyboard paste workflow. The `Test Paste` button is a temporary development shortcut that skips HugMe and runs the Excel phase against an ignored local test XLSX. The default placement is top-right; dragging saves the position, while browser resize/zoom should only keep the popup visible and should not save a new position.
+The tracked-tab buttons are outline-only: green/check means ready, blue/spinner means checking/loading, and red/X means blocked or login/permisson needed. The `RA > BI` button calls the RA export/download/parser and guarded Excel Web keyboard paste workflow. The temporary `Test Paste` button/action and local test XLSX were removed from dev and release builds. The default placement is top-right; dragging saves the position, while browser resize/zoom should only keep the popup visible and should not save a new position.
+
+## Workspace Tabs
+
+RaBiTool owns a reserved pair of HugMe/Planilha tabs. On activation and on `RA > BI`, it prepares the assigned tabs. It reuses only the tab IDs and Chrome group ID recorded by RaBiTool for the current extension load marker; it does not scan arbitrary existing tabs or trust an old group merely because it is named `RaBiTool`.
+
+Assigned tabs are grouped as `RaBiTool` when Chrome allows it. Chrome tab groups support named colors rather than custom hex colors, so the extension uses Chrome's `green` group color as the closest available match to the `RA > BI` button.
 
 ## Permissions
 
@@ -65,11 +71,14 @@ Prototype permissions:
 
 - `storage`
 - `tabs`
+- `tabGroups`
 - `scripting`
 - `commands`
 - `downloads`
 - `offscreen`
 - `clipboardWrite`
+- `clipboardRead`
+- `debugger`
 - `host_permissions`: `<all_urls>`
 - content script `matches`: `<all_urls>`
 

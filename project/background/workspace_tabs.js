@@ -1,5 +1,7 @@
 // Workspace tab launch/tracking for RA and BI pages.
 const WORKSPACE_RETURN_COOLDOWN_MS = 5000;
+const WORKSPACE_GROUP_TITLE = 'RaBiTool';
+const WORKSPACE_GROUP_COLOR = 'green';
 
 const WORKSPACE_TAB_DEFS = {
   ra: {
@@ -67,20 +69,20 @@ function setWorkspaceTabs(value) {
   });
 }
 
+function getWorkspaceRefreshMark() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(WORKSPACE_REFRESH_MARK_KEY, (data) => {
+      resolve(String(data?.[WORKSPACE_REFRESH_MARK_KEY] || ''));
+    });
+  });
+}
+
 async function getLiveWorkspaceTab(kind, tracked) {
   const id = tracked?.[kind]?.tabId;
   if (!Number.isInteger(id)) return null;
   const tab = await getTab(id);
   if (!tab) return null;
   return tab;
-}
-
-async function findExistingWorkspaceTab(kind) {
-  const tabs = await queryTabs({});
-  if (kind === 'ra') {
-    return tabs.find((tab) => isWorkspaceTargetUrl(kind, tab.url)) || null;
-  }
-  return tabs.find((tab) => isWorkspaceTargetUrl(kind, tab.url)) || null;
 }
 
 function createInactiveSideTab(url, openerTab, offset) {
@@ -98,22 +100,80 @@ function createInactiveSideTab(url, openerTab, offset) {
   });
 }
 
-async function ensureWorkspaceTab(kind, openerTab, offset) {
-  const tracked = await getWorkspaceTabs();
-  const liveTracked = await getLiveWorkspaceTab(kind, tracked);
-  if (liveTracked) return { ok: true, tab: liveTracked, reused: true };
+async function groupWorkspaceTabs(tabs) {
+  const tabIds = (tabs || [])
+    .map((tab) => tab?.id)
+    .filter((id) => Number.isInteger(id));
+  if (tabIds.length < 2 || !chrome.tabs?.group || !chrome.tabGroups?.update) {
+    return { ok: false, skipped: true };
+  }
 
-  const existing = await findExistingWorkspaceTab(kind);
-  if (existing) {
-    tracked[kind] = markWorkspaceEntry(tracked[kind], {
-      tabId: existing.id,
-      url: existing.url || '',
-      openedAt: tracked[kind]?.openedAt || new Date().toISOString(),
-      returnAfterAuth: false,
-      authDetected: false
+  return new Promise((resolve) => {
+    chrome.tabs.group({ tabIds }, (groupId) => {
+      if (chrome.runtime.lastError || !Number.isInteger(groupId)) {
+        resolve({ ok: false, reason: chrome.runtime.lastError?.message || 'Nao consegui agrupar as abas RaBiTool.' });
+        return;
+      }
+      chrome.tabGroups.update(groupId, {
+        title: WORKSPACE_GROUP_TITLE,
+        color: WORKSPACE_GROUP_COLOR,
+        collapsed: false
+      }, () => {
+        resolve(chrome.runtime.lastError
+          ? { ok: false, groupId, reason: chrome.runtime.lastError.message }
+          : { ok: true, groupId });
+      });
     });
-    await setWorkspaceTabs(tracked);
-    return { ok: true, tab: existing, reused: true };
+  });
+}
+
+async function getLiveWorkspaceTabsFromCurrentGroup(tracked, mark) {
+  if (!mark || tracked?.groupCreatedForMark !== mark || !Number.isInteger(tracked?.groupId)) {
+    return {};
+  }
+
+  const [raTab, biTab] = await Promise.all([
+    getLiveWorkspaceTab('ra', tracked),
+    getLiveWorkspaceTab('bi', tracked)
+  ]);
+  const tabs = {};
+  if (raTab && raTab.groupId === tracked.groupId) tabs.ra = raTab;
+  if (biTab && biTab.groupId === tracked.groupId) tabs.bi = biTab;
+  return tabs;
+}
+
+async function refreshWorkspaceTabIfNeeded(kind, tab, tracked) {
+  const mark = await getWorkspaceRefreshMark();
+  if (!mark || !tab?.id) return { tab, refreshed: false };
+
+  const entry = tracked[kind] || {};
+  if (entry.refreshedForMark === mark) return { tab, refreshed: false };
+  if (!isWorkspaceTargetUrl(kind, tab.url)) return { tab, refreshed: false };
+
+  tracked[kind] = markWorkspaceEntry(entry, {
+    tabId: tab.id,
+    url: tab.url || '',
+    status: 'loading',
+    refreshedForMark: mark,
+    refreshedAfterExtensionLoadAt: new Date().toISOString()
+  });
+  await setWorkspaceTabs(tracked);
+
+  await new Promise((resolve) => {
+    chrome.tabs.reload(tab.id, {}, () => resolve(!chrome.runtime.lastError));
+  });
+
+  return { tab: await getTab(tab.id) || tab, refreshed: true };
+}
+
+async function ensureWorkspaceTab(kind, openerTab, offset, options = {}) {
+  const tracked = await getWorkspaceTabs();
+  const refreshMark = await getWorkspaceRefreshMark();
+  const groupedTabs = await getLiveWorkspaceTabsFromCurrentGroup(tracked, refreshMark);
+  const liveTracked = options.forceNew ? (groupedTabs[kind] || null) : (groupedTabs[kind] || await getLiveWorkspaceTab(kind, tracked));
+  if (liveTracked) {
+    const refreshed = await refreshWorkspaceTabIfNeeded(kind, liveTracked, tracked);
+    return { ok: true, tab: refreshed.tab, reused: true, refreshed: refreshed.refreshed };
   }
 
   const created = await createInactiveSideTab(WORKSPACE_TAB_DEFS[kind].url, openerTab, offset);
@@ -122,6 +182,10 @@ async function ensureWorkspaceTab(kind, openerTab, offset) {
     tabId: created.tab.id,
     url: created.tab.url || '',
     openedAt: new Date().toISOString(),
+    reservedForRaBiTool: true,
+    createdFresh: true,
+    createdForMark: refreshMark,
+    refreshedForMark: refreshMark,
     returnAfterAuth: false,
     authDetected: false
   });
@@ -192,14 +256,26 @@ async function handleWorkspaceTabRemoved(tabId) {
   await setWorkspaceTabs(tracked);
 }
 
-async function ensureWorkspaceTabs(openerTab) {
-  const ra = await ensureWorkspaceTab('ra', openerTab, 1);
-  const bi = await ensureWorkspaceTab('bi', openerTab, 2);
+async function ensureWorkspaceTabs(openerTab, options = {}) {
+  const ra = await ensureWorkspaceTab('ra', openerTab, 1, options);
+  const bi = await ensureWorkspaceTab('bi', openerTab, 2, options);
+  const group = ra.ok && bi.ok ? await groupWorkspaceTabs([ra.tab, bi.tab]) : { ok: false, skipped: true };
+  if (group.ok) {
+    const tracked = await getWorkspaceTabs();
+    const refreshMark = await getWorkspaceRefreshMark();
+    tracked.groupId = group.groupId;
+    tracked.groupTitle = WORKSPACE_GROUP_TITLE;
+    tracked.groupColor = WORKSPACE_GROUP_COLOR;
+    tracked.groupCreatedForMark = refreshMark;
+    tracked.groupUpdatedAt = new Date().toISOString();
+    await setWorkspaceTabs(tracked);
+  }
   return {
     ok: !!ra.ok && !!bi.ok,
     stage: 'workspace-tabs',
-    ra: ra.ok ? { tabId: ra.tab.id, reused: !!ra.reused } : { error: ra.reason },
-    bi: bi.ok ? { tabId: bi.tab.id, reused: !!bi.reused } : { error: bi.reason },
+    ra: ra.ok ? { tabId: ra.tab.id, reused: !!ra.reused, refreshed: !!ra.refreshed } : { error: ra.reason },
+    bi: bi.ok ? { tabId: bi.tab.id, reused: !!bi.reused, refreshed: !!bi.refreshed } : { error: bi.reason },
+    group,
     reason: !ra.ok || !bi.ok ? 'Nao consegui abrir/rastrear as abas HugMe e Planilha.' : ''
   };
 }

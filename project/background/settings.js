@@ -30,6 +30,9 @@ function setStartupDisabled(callback) {
 function handleInstalled(details = {}) {
   setStartupDisabled(() => {
     if (details.reason === 'install' || details.reason === 'update') {
+      chrome.storage.local.set({ [WORKSPACE_REFRESH_MARK_KEY]: new Date().toISOString() });
+    }
+    if (details.reason === 'install' || details.reason === 'update') {
       chrome.runtime.openOptionsPage();
     }
   });

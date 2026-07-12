@@ -41,9 +41,6 @@
       <button class="csh-run-btn" id="csh-btn-run" type="button">
         <span>RA &gt; BI</span><span class="csh-run-spinner" aria-hidden="true"></span>
       </button>
-      <button class="csh-run-btn csh-test-btn" id="csh-btn-test-paste" type="button">
-        <span>Test Paste</span><span class="csh-run-spinner" aria-hidden="true"></span>
-      </button>
       <div class="csh-progress" id="csh-progress" hidden>
         <span class="csh-spinner" aria-hidden="true"></span>
         <span class="csh-progress-text" id="csh-progress-text">Aguardando...</span>

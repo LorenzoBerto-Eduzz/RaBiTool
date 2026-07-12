@@ -34,11 +34,12 @@ The project should be developed as a reliable business-data workflow, not as a l
 ## Initial Scope
 
 - Project identity and settings renamed to RaBiTool.
-- Popup gets project workflow controls and status text.
+- Popup has project workflow controls and status text.
 - Background workflow action names are stable.
-- RA export/download automation exists for the current HugMe flow and is being tested through completed XLSX download detection.
-- Excel import modules now include conservative parser/inspection, active worksheet guard, keyboard/debugger overlap validation, clipboard TSV preparation, and one-block paste through Excel Web when guards pass.
-- Downloads, offscreen clipboard, tabs, scripting, and commands are available for the prototype.
+- RA export/download automation exists for the current HugMe flow, including a page-side watcher for the generated report's Download button and Chrome XLSX download detection by title token.
+- Excel import modules now include XLSX parser/validation, active worksheet guard, keyboard/debugger anchor verification, clipboard TSV preparation, and one-block paste through Excel Web when guards pass.
+- Downloads, offscreen clipboard, tabs, tab groups, scripting, debugger, and commands are available for the prototype.
+- Activation and `RA > BI` use RaBiTool-owned reserved HugMe/Planilha tabs. Current-load group/tab IDs are reused; arbitrary pre-existing tabs or stale groups named `RaBiTool` are ignored.
 - Broad host permissions remain during discovery.
 - Durable docs capture the current two-spreadsheet model and alignment-first development plan.
 - Popup visual baseline is a clean white shell with gray controls and green hover.

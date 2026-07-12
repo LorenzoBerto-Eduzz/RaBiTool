@@ -1,9 +1,6 @@
 // Reclame Aqui source-page automation.
 const RA_EXPORT_URL_FRAGMENT = 'app.hugme.com.br/app.html#/dados/tickets/exportar';
 const EXCEL_HOST_HINTS = ['eduzz.sharepoint.com', 'excel.officeapps.live.com', 'officeapps.live.com'];
-const RABI_FIXED_TEST_XLSX_FILENAME = '966_rabitoolrelatorio103600110726_1783777020004.xlsx';
-const RABI_FIXED_TEST_XLSX_PATH = 'C:\\C.Nvme\\Downloads\\966_rabitoolrelatorio103600110726_1783777020004.xlsx';
-const RABI_FIXED_TEST_XLSX_RESOURCE = `local_test_data/${RABI_FIXED_TEST_XLSX_FILENAME}`;
 
 function getStoredSettings() {
   return new Promise((resolve) => {
@@ -34,6 +31,10 @@ function formatReportTimeTag(date) {
   ].join('');
 }
 
+function getReportTitleToken(title) {
+  return String(title || '').match(/rabitoolrelatorio(\d{12})/i)?.[1] || '';
+}
+
 function addDays(date, days) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -52,91 +53,44 @@ function isExcelMotherSheetTab(tab, settings) {
 }
 
 async function findRequiredWorkflowTabs(settings) {
-  const tabs = await queryTabs({});
-  const raTabs = tabs.filter(isRaExportTab);
-  const excelTabs = tabs.filter((tab) => isExcelMotherSheetTab(tab, settings));
+  const tracked = await getWorkspaceTabs();
+  const [raTab, excelTab] = await Promise.all([
+    getLiveWorkspaceTab('ra', tracked),
+    getLiveWorkspaceTab('bi', tracked)
+  ]);
 
-  if (!raTabs.length || !excelTabs.length) {
+  if (!raTab || !excelTab || !isRaExportTab(raTab) || !isExcelMotherSheetTab(excelTab, settings)) {
     return {
       ok: false,
       stage: 'tabs',
-      reason: 'Abas do HugMe e Planilha Mae nao preparadas'
+      reason: 'Abas reservadas do HugMe e Planilha Mae nao preparadas'
     };
   }
 
-  return { ok: true, raTab: raTabs[0], excelTab: excelTabs[0] };
+  return { ok: true, raTab, excelTab };
 }
 
-async function findExcelWorkflowTab(settings) {
-  const tabs = await queryTabs({});
-  const excelTab = tabs.find((tab) => isExcelMotherSheetTab(tab, settings)) || null;
-  if (!excelTab) {
-    return {
-      ok: false,
-      stage: 'tabs',
-      reason: 'Aba da Planilha Mae nao preparada'
-    };
-  }
-  return { ok: true, excelTab };
-}
+async function waitForReservedWorkflowTabs(settings, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null;
 
-function normalizeDownloadPath(value) {
-  return String(value || '').replace(/\//g, '\\').toLowerCase();
-}
-
-async function findFixedTestDownload() {
-  if (!chrome.downloads?.search) {
-    return { ok: false, stage: 'download', reason: 'Chrome downloads API is unavailable.' };
+  while (Date.now() < deadline) {
+    last = await findRequiredWorkflowTabs(settings);
+    if (last.ok) return last;
+    await delay(500);
   }
 
-  return new Promise((resolve) => {
-    chrome.downloads.search({ limit: 200, orderBy: ['-startTime'] }, (downloads) => {
-      if (chrome.runtime.lastError) {
-        resolve({ ok: false, stage: 'download', reason: chrome.runtime.lastError.message });
-        return;
-      }
-
-      const expectedPath = normalizeDownloadPath(RABI_FIXED_TEST_XLSX_PATH);
-      const expectedName = RABI_FIXED_TEST_XLSX_FILENAME.toLowerCase();
-      const match = (downloads || []).find((item) => {
-        const filename = normalizeDownloadPath(item.filename);
-        return filename === expectedPath || filename.endsWith(`\\${expectedName}`);
-      });
-
-      if (!match) {
-        resolve({
-          ok: false,
-          stage: 'download',
-          reason: `Nao encontrei no historico do Chrome downloads o XLSX fixo: ${RABI_FIXED_TEST_XLSX_PATH}`
-        });
-        return;
-      }
-
-      if (match.state !== 'complete') {
-        resolve({
-          ok: false,
-          stage: 'download',
-          reason: `O XLSX fixo existe no Chrome downloads, mas nao esta completo: ${match.state || 'estado desconhecido'}.`
-        });
-        return;
-      }
-
-      resolve({
-        ok: true,
-        stage: 'download',
-        downloadId: match.id,
-        filename: match.filename,
-        url: match.url,
-        mime: match.mime,
-        state: match.state
-      });
-    });
-  });
+  return {
+    ok: false,
+    stage: 'tabs',
+    reason: last?.reason || 'Abas reservadas do HugMe e Planilha Mae nao ficaram prontas.'
+  };
 }
 
 async function waitForMatchingDownload(title, clickedAtMs, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   const normalizedTitle = String(title || '').toLowerCase();
+  const titleToken = getReportTitleToken(title);
   let lastSeen = '';
 
   while (Date.now() < deadline) {
@@ -159,7 +113,8 @@ async function waitForMatchingDownload(title, clickedAtMs, timeoutMs) {
         });
         const match = freshXlsx.find((item) => {
           const filename = String(item.filename || item.url || '').toLowerCase();
-          return filename.includes(normalizedTitle);
+          return filename.includes(normalizedTitle) ||
+            (!!titleToken && filename.includes(`rabitoolrelatorio${titleToken}`));
         }) || (freshXlsx.length === 1 ? freshXlsx[0] : null);
 
         if (!match) {
@@ -409,105 +364,136 @@ function setupRaReportFormInPage(args) {
   })();
 }
 
-function inspectRaReportItemInPage(title) {
+function waitForAndClickRaReportDownloadInPage(args) {
+  const {
+    title,
+    titleToken,
+    pollingMs,
+    timeoutMs
+  } = args;
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   function visible(element) {
     if (!element) return false;
     const style = getComputedStyle(element);
     return style.display !== 'none' && style.visibility !== 'hidden' && !element.closest('.ng-hide');
   }
 
-  const items = Array.from(document.querySelectorAll('li.item'));
-  const matches = items.filter((item) => {
-    const heading = item.querySelector('h5');
-    return heading && heading.textContent.trim() === title && visible(item);
-  });
-
-  if (!matches.length) {
-    return { ok: true, stage: 'ra-processing', status: 'missing', title };
-  }
-  if (matches.length > 1) {
-    return { ok: false, stage: 'ra-processing', reason: `Mais de um relatorio encontrado com o titulo ${title}.` };
+  function normalize(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, '')
+      .trim()
+      .toLowerCase();
   }
 
-  const item = matches[0];
-  const buttons = Array.from(item.querySelectorAll('button'));
-  const downloadButton = buttons.find((button) => visible(button) && button.textContent.trim().toLowerCase() === 'download');
-  const processingButton = buttons.find((button) => visible(button) && button.textContent.toLowerCase().includes('processando'));
-  const idText = Array.from(item.querySelectorAll('.faded.id')).map((node) => node.textContent.trim()).find(Boolean) || '';
-  const dateText = Array.from(item.querySelectorAll('.faded.date')).map((node) => node.textContent.trim()).find(Boolean) || '';
-
-  if (downloadButton) {
-    return { ok: true, stage: 'ra-processing', status: 'ready', title, idText, dateText };
-  }
-  if (processingButton) {
-    return { ok: true, stage: 'ra-processing', status: 'processing', title, idText, dateText };
-  }
-  return { ok: true, stage: 'ra-processing', status: 'unknown', title, idText, dateText };
-}
-
-function clickRaReportDownloadInPage(title) {
-  function visible(element) {
-    if (!element) return false;
-    const style = getComputedStyle(element);
-    return style.display !== 'none' && style.visibility !== 'hidden' && !element.closest('.ng-hide');
+  function getHeading(item) {
+    return item?.querySelector('h5')?.textContent?.trim() || '';
   }
 
-  const items = Array.from(document.querySelectorAll('li.item')).filter((item) => {
-    const heading = item.querySelector('h5');
-    return heading && heading.textContent.trim() === title && visible(item);
-  });
-  if (items.length !== 1) {
-    return { ok: false, stage: 'ra-download', reason: `Relatorio ${title} nao foi encontrado de forma unica para download.` };
-  }
-  const item = items[0];
-  const button = Array.from(item.querySelectorAll('button')).find((item) => {
-    return visible(item) && item.textContent.trim().toLowerCase() === 'download';
-  });
-  if (!button) return { ok: false, stage: 'ra-download', reason: `Botao Download nao esta visivel para ${title}.` };
-
-  button.scrollIntoView({ block: 'center', inline: 'center' });
-  button.focus();
-  ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((type) => {
-    button.dispatchEvent(new MouseEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      view: window
-    }));
-  });
-
-  const idText = Array.from(item.querySelectorAll('.faded.id')).map((node) => node.textContent.trim()).find(Boolean) || '';
-  const reportId = (idText.match(/\d+/) || [])[0];
-  return { ok: true, stage: 'ra-download', title, reportId };
-}
-
-async function waitForRaReportReady(tabId, title, pollingMs, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  let lastStatus = null;
-
-  while (Date.now() < deadline) {
-    await setRaBiWorkflowStatus({
-      running: true,
-      activeText: 'Processando relat\u00f3rio...'
+  function getMatchingItems() {
+    const wanted = normalize(title);
+    const tokenNeedle = titleToken ? `rabitoolrelatorio${titleToken}`.toLowerCase() : '';
+    return Array.from(document.querySelectorAll('li.item')).filter((item) => {
+      if (!visible(item)) return false;
+      const heading = getHeading(item);
+      const normalizedHeading = normalize(heading);
+      return normalizedHeading === wanted ||
+        (!!tokenNeedle && normalizedHeading.includes(tokenNeedle));
     });
-    const inspection = await runFunctionInTab(tabId, inspectRaReportItemInPage, [title]);
-    if (!inspection.ok) return inspection;
-    lastStatus = inspection.status;
-    if (inspection.status === 'ready') return inspection;
-    await delay(pollingMs);
   }
 
-  return {
-    ok: false,
-    stage: 'ra-processing',
-    reason: `Relatorio ${title} nao ficou pronto em ate ${Math.round(timeoutMs / 1000)} segundos. Ultimo estado: ${lastStatus || 'indefinido'}.`
-  };
+  function getReportId(item) {
+    const idText = Array.from(item.querySelectorAll('.faded.id'))
+      .map((node) => node.textContent.trim())
+      .find(Boolean) || '';
+    return (idText.match(/\d+/) || [])[0] || '';
+  }
+
+  function clickDownloadButton(button) {
+    button.scrollIntoView({ block: 'center', inline: 'center' });
+    button.focus();
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((type) => {
+      button.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window
+      }));
+    });
+    button.click();
+  }
+
+  return (async () => {
+    const deadline = Date.now() + timeoutMs;
+    let lastStatus = 'indefinido';
+
+    while (Date.now() < deadline) {
+      const matches = getMatchingItems();
+      if (matches.length > 1) {
+        return {
+          ok: false,
+          stage: 'ra-download',
+          reason: `Mais de um relatorio encontrado com o titulo/token ${title}.`
+        };
+      }
+
+      if (!matches.length) {
+        lastStatus = 'relatorio ainda nao apareceu na lista';
+        await sleep(pollingMs);
+        continue;
+      }
+
+      const item = matches[0];
+      const buttons = Array.from(item.querySelectorAll('button'));
+      const downloadButton = buttons.find((button) => {
+        return visible(button) && button.textContent.trim().toLowerCase() === 'download';
+      });
+
+      if (downloadButton) {
+        clickDownloadButton(downloadButton);
+        return {
+          ok: true,
+          stage: 'ra-download',
+          title: getHeading(item),
+          expectedTitle: title,
+          titleToken,
+          reportId: getReportId(item),
+          clickedAtMs: Date.now()
+        };
+      }
+
+      const processingButton = buttons.find((button) => {
+        return visible(button) && button.textContent.toLowerCase().includes('processando');
+      });
+      lastStatus = processingButton ? 'processando' : 'relatorio encontrado sem download visivel';
+      await sleep(pollingMs);
+    }
+
+    return {
+      ok: false,
+      stage: 'ra-processing',
+      reason: `Relatorio ${title} nao liberou Download em ate ${Math.round(timeoutMs / 1000)} segundos. Ultimo estado: ${lastStatus}.`
+    };
+  })();
 }
 
 async function prepareReclameAquiExport() {
   const settings = await getStoredSettings();
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Verificando abas...' });
-  const tabs = await findRequiredWorkflowTabs(settings);
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Preparando abas reservadas...' });
+  const workspace = await ensureWorkspaceTabs(null);
+  if (!workspace.ok) return workspace;
+  const tabs = await waitForReservedWorkflowTabs(settings);
   if (!tabs.ok) return tabs;
+
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Aguardando abas carregarem...' });
+  await Promise.all([
+    waitForTabComplete(tabs.raTab.id, 20000),
+    waitForTabComplete(tabs.excelTab.id, 30000)
+  ]);
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Aguardando HugMe carregar...' });
   await waitForTabComplete(tabs.raTab.id, 15000);
@@ -520,6 +506,7 @@ async function prepareReclameAquiExport() {
   const pollingMs = 2000;
   const processingTimeoutMs = 420000;
   const downloadTimeoutMs = Number(settings.workflow?.downloadTimeoutMs) || 60000;
+  const titleToken = getReportTitleToken(title);
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Preparando para gerar relat\u00f3rio...' });
   const setup = await runFunctionInTab(tabs.raTab.id, setupRaReportFormInPage, [{
@@ -534,13 +521,17 @@ async function prepareReclameAquiExport() {
 
   if (!setup.ok) return setup;
 
-  const ready = await waitForRaReportReady(tabs.raTab.id, title, pollingMs, processingTimeoutMs);
-  if (!ready.ok) return ready;
-
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Relatorio pronto. Clicando em Download...' });
-  const clickedAtMs = Date.now();
-  const clicked = await runFunctionInTab(tabs.raTab.id, clickRaReportDownloadInPage, [title]);
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Processando relat\u00f3rio...' });
+  const clicked = await runFunctionInTab(tabs.raTab.id, waitForAndClickRaReportDownloadInPage, [{
+    title,
+    titleToken,
+    pollingMs: Math.min(pollingMs, 1000),
+    timeoutMs: processingTimeoutMs
+  }]);
   if (!clicked.ok) return clicked;
+
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Relatorio pronto. Iniciando download...' });
+  const clickedAtMs = Number(clicked.clickedAtMs) || Date.now();
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Baixando XLSX pelo Chrome...' });
   const download = await waitForMatchingDownload(title, clickedAtMs, downloadTimeoutMs);
@@ -574,7 +565,7 @@ async function prepareReclameAquiExport() {
     rows: parsed.rows
   });
 
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Validando Planilha Mae...' });
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Preparando colagem na Planilha Mae...' });
   const excelResult = await applyExcelWorkbookUpdate(tabs.excelTab.id);
   if (!excelResult.ok) {
     return {
@@ -603,87 +594,13 @@ async function prepareReclameAquiExport() {
     reportFirstDate: parsed.firstDate,
     reportLastDate: parsed.lastDate,
     excelResult,
-    message: `XLSX validado e Planilha Mae atualizada: ${parsed.rowCount} linhas. IDs ${parsed.firstId} -> ${parsed.lastId}.`
-  };
-}
-
-async function testPasteFixedDownloadedReport() {
-  const settings = await getStoredSettings();
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Abrindo Planilha Mae...' });
-  const ensured = await ensureWorkspaceTab('bi', null, 1);
-  const tabs = ensured.ok
-    ? { ok: true, excelTab: ensured.tab }
-    : await findExcelWorkflowTab(settings);
-  if (!tabs.ok) return tabs;
-
-  const download = {
-    ok: true,
-    stage: 'download',
-    downloadId: 'fixed-test-resource',
-    filename: RABI_FIXED_TEST_XLSX_PATH,
-    resourcePath: RABI_FIXED_TEST_XLSX_RESOURCE
-  };
-
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Lendo e validando XLSX fixo...' });
-  const parsed = await fetchAndParsePackagedRaReport(RABI_FIXED_TEST_XLSX_RESOURCE);
-  if (!parsed.ok) {
-    return {
-      ...parsed,
-      title: 'Test Paste',
-      filename: download.filename,
-      downloadId: download.downloadId
-    };
-  }
-
-  setLatestParsedRaReport({
-    title: 'Test Paste',
-    download,
-    parsedAt: new Date().toISOString(),
-    columns: parsed.columns,
-    sheetPath: parsed.sheetPath,
-    headerRowNumber: parsed.headerRowNumber,
-    rowCount: parsed.rowCount,
-    firstId: parsed.firstId,
-    lastId: parsed.lastId,
-    firstDate: parsed.firstDate,
-    lastDate: parsed.lastDate,
-    rows: parsed.rows
-  });
-
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Validando Planilha Mae...' });
-  const excelResult = await applyExcelWorkbookUpdate(tabs.excelTab.id);
-  if (!excelResult.ok) {
-    return {
-      ...excelResult,
-      title: 'Test Paste',
-      filename: download.filename,
-      reportRowCount: parsed.rowCount,
-      reportFirstId: parsed.firstId,
-      reportLastId: parsed.lastId,
-      reportFirstDate: parsed.firstDate,
-      reportLastDate: parsed.lastDate
-    };
-  }
-
-  return {
-    ok: true,
-    stage: 'excel-paste',
-    title: 'Test Paste',
-    downloadId: download.downloadId,
-    filename: download.filename,
-    reportRowCount: parsed.rowCount,
-    reportFirstId: parsed.firstId,
-    reportLastId: parsed.lastId,
-    reportFirstDate: parsed.firstDate,
-    reportLastDate: parsed.lastDate,
-    excelResult,
-    message: `Teste colou ${parsed.rowCount} linhas do XLSX fixo. IDs ${parsed.firstId} -> ${parsed.lastId}.`
+    message: `RA > BI concluido: ${parsed.rowCount} linhas coladas na Planilha Mae. IDs ${parsed.firstId} -> ${parsed.lastId}.`
   };
 }
 
 async function findLatestRaDownload() {
   if (!chrome.downloads?.search) {
-    return { ok: false, stage: 'download', reason: 'Chrome downloads API is unavailable.' };
+    return { ok: false, stage: 'download', reason: 'A API de downloads do Chrome nao esta disponivel.' };
   }
 
   return new Promise((resolve) => {
@@ -699,7 +616,7 @@ async function findLatestRaDownload() {
       });
 
       if (!latestXlsx) {
-        resolve({ ok: false, stage: 'download', reason: 'No recent XLSX download was found.' });
+        resolve({ ok: false, stage: 'download', reason: 'Nenhum download XLSX recente foi encontrado.' });
         return;
       }
 

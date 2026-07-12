@@ -96,7 +96,7 @@ async function verifyExcelWorksheetReady(excelTabId, settings) {
     return {
       ok: false,
       stage: 'excel-worksheet',
-      reason: inspected?.reason || `Nao consegui verificar se a worksheet ativa e "${expectedName}".`
+      reason: inspected?.reason || `Nao consegui verificar se a aba ativa do Excel e "${expectedName}".`
     };
   }
 
@@ -120,12 +120,8 @@ async function verifyExcelWorksheetReady(excelTabId, settings) {
   return {
     ok: false,
     stage: 'excel-worksheet',
-    reason: `A worksheet ativa do Excel Web nao foi confirmada como "${expectedName}". Aba ativa detectada: "${activeName}".${suffix} Nao vou colar fora da worksheet correta.`
+    reason: `A aba ativa do Excel Web nao foi confirmada como "${expectedName}". Aba ativa detectada: "${activeName}".${suffix} Nao vou colar fora da aba correta.`
   };
-}
-
-function getReportDateMs(row) {
-  return parseReportDateValue(row?.['Data Reclamação']);
 }
 
 function rowToTsvLine(row, columns = RABI_TARGET_COLUMNS) {
@@ -153,17 +149,6 @@ function normalizeExcelIdValue(value) {
   return text.replace(/\s+/g, '');
 }
 
-function parseCopiedExcelIdColumn(text) {
-  return String(text || '')
-    .split(/\r?\n/)
-    .map((line) => normalizeExcelIdValue(line.split('\t')[0]))
-    .filter(Boolean);
-}
-
-function getReportIds(reportRows) {
-  return (reportRows || []).map((row) => normalizeExcelIdValue(getRowId(row))).filter(Boolean);
-}
-
 async function copySelectedExcelText(target, stage) {
   const sentinel = `__RABITOOL_CLIPBOARD_SENTINEL_${Date.now()}_${Math.random().toString(16).slice(2)}__`;
   const seeded = await copyText(sentinel);
@@ -181,7 +166,7 @@ async function copySelectedExcelText(target, stage) {
     return {
       ok: false,
       stage,
-      reason: 'Excel nao copiou nenhum valor apos Ctrl+C. Provavelmente o foco ainda nao estava numa celula da Planilha.'
+      reason: 'Excel nao copiou nenhum valor apos Ctrl+C. Provavelmente a celula alvo ainda nao estava selecionada.'
     };
   }
   return { ok: true, stage, text: selected.text || '' };
@@ -249,7 +234,7 @@ async function focusExcelWorkbookSurface(target) {
     return {
       ok: false,
       stage: 'excel-focus',
-      reason: focused?.reason || 'Nao consegui preparar foco na superficie do Excel.'
+      reason: focused?.reason || 'Nao consegui preparar foco na area da Planilha.'
     };
   }
   const clicked = await dispatchDebuggerMouseClick(target, focused.x, focused.y);
@@ -287,7 +272,7 @@ function fillExcelFindDialogInPage(value, submit = false) {
     return {
       ok: false,
       stage: 'excel-find-dialog',
-      reason: 'O dialog Find do Excel abriu, mas o campo de busca #findTextId nao ficou acessivel.'
+      reason: 'A busca do Excel abriu, mas o campo de texto nao ficou acessivel.'
     };
   }
 
@@ -319,23 +304,27 @@ function fillExcelFindDialogInPage(value, submit = false) {
     activeElementLabel: document.activeElement?.getAttribute?.('aria-label') || ''
   };
 
-  if (!submit) return result;
+  const submitCount = typeof submit === 'number' ? submit : (submit ? 1 : 0);
+  if (!submitCount) return result;
 
   return (async () => {
     await sleep(80);
     input.focus();
-    ['keydown', 'keypress', 'keyup'].forEach((type) => {
-      input.dispatchEvent(new KeyboardEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        key: 'Enter',
-        code: 'Enter',
-        keyCode: 13,
-        which: 13
-      }));
-    });
-    return { ...result, submitted: true };
+    for (let index = 0; index < submitCount; index += 1) {
+      ['keydown', 'keypress', 'keyup'].forEach((type) => {
+        input.dispatchEvent(new KeyboardEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13
+        }));
+      });
+      await sleep(80);
+    }
+    return { ...result, submitted: true, submitCount };
   })();
 }
 
@@ -350,7 +339,7 @@ async function fillExcelFindDialog(target, id, stage, submit = false) {
     return {
       ok: false,
       stage,
-      reason: frameResult?.reason || direct?.reason || 'Nao consegui procurar o campo Find nos frames do Excel.'
+      reason: frameResult?.reason || direct?.reason || 'Nao consegui encontrar o campo de busca nos frames do Excel.'
     };
   }
 
@@ -365,7 +354,7 @@ async function fillExcelFindDialog(target, id, stage, submit = false) {
   return {
     ok: false,
     stage,
-    reason: `O dialog Find do Excel abriu, mas o campo de busca nao ficou preenchivel nos frames acessiveis. ${firstError}`.trim()
+    reason: `A busca do Excel abriu, mas o campo de busca nao ficou preenchivel nos frames acessiveis. ${firstError}`.trim()
   };
 }
 
@@ -374,542 +363,58 @@ async function findExcelIdWithSearch(target, id, stage = 'excel-find-anchor') {
   const focus = await focusExcelWorkbookSurface(target);
   if (!focus.ok) return focus;
 
-  let sent = await dispatchDebuggerCtrlShortcut(target, 'f', 'KeyF', 70);
-  if (!sent.ok) return { ok: false, stage, reason: `Ctrl+F via debugger falhou: ${sent.reason}` };
-  await delay(900);
+  let lastCopiedText = '';
+  let lastReason = '';
 
-  const filled = await fillExcelFindDialog(target, id, stage, true);
-  if (!filled?.ok) {
-    return {
-      ok: false,
-      stage,
-      reason: filled?.reason || 'Nao consegui focar/preencher o campo Find do Excel.'
-    };
-  }
-  if (normalizeExcelIdValue(filled.value) !== wanted) {
-    return {
-      ok: false,
-      stage,
-      reason: `Campo Find do Excel nao confirmou o ID esperado. Esperado ${id}, valor atual "${filled.value || ''}".`
-    };
-  }
-  await delay(2000);
+  const attemptWaits = [500, 1000];
+  for (let attempt = 1; attempt <= attemptWaits.length; attempt += 1) {
+    let sent = await dispatchDebuggerCtrlShortcut(target, 'f', 'KeyF', 70);
+    if (!sent.ok) return { ok: false, stage, reason: `Ctrl+F na Planilha falhou: ${sent.reason}` };
+    await delay(250);
 
-  sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
-  if (!sent.ok) return { ok: false, stage, reason: `Escape para fechar busca falhou: ${sent.reason}` };
-  await delay(700);
-
-  const selected = await copySelectedExcelText(target, `${stage}-verify`);
-  if (!selected.ok) return selected;
-
-  const selectedId = normalizeExcelIdValue(selected.text);
-  if (selectedId !== wanted) {
-    return {
-      ok: false,
-      stage: `${stage}-verify`,
-      reason: `Busca no Excel nao confirmou a celula alvo. Esperado Id HugMe ${id}, mas a celula selecionada copiou "${String(selected.text || '').trim()}". Nao vou colar.`
-    };
-  }
-
-  return { ok: true, stage, id: wanted, copiedText: selected.text };
-}
-
-async function readMotherOverlapIdsFromAnchor(target, anchorId, reportIds) {
-  const wantedAnchor = normalizeExcelIdValue(anchorId);
-  let sent = await dispatchDebuggerKey(target, 'ArrowDown', 'ArrowDown', 40);
-  if (!sent.ok) return { ok: false, stage: 'excel-overlap-ui', reason: `Seta para baixo apos ancora falhou: ${sent.reason}` };
-  await delay(220);
-
-  const nextCell = await copySelectedExcelText(target, 'excel-overlap-probe');
-  if (!nextCell.ok) return nextCell;
-  const nextId = normalizeExcelIdValue(nextCell.text);
-
-  sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
-  if (!sent.ok) return { ok: false, stage: 'excel-overlap-ui', reason: `Escape apos copiar linha de probe falhou: ${sent.reason}` };
-  await delay(180);
-
-  if (!nextId) {
-    return {
-      ok: true,
-      stage: 'excel-overlap-ui',
-      motherIds: [wantedAnchor],
-      motherLatestId: wantedAnchor
-    };
-  }
-
-  sent = await dispatchDebuggerKey(target, 'ArrowUp', 'ArrowUp', 38);
-  if (!sent.ok) return { ok: false, stage: 'excel-overlap-ui', reason: `Seta para cima para voltar a ancora falhou: ${sent.reason}` };
-  await delay(220);
-
-  const anchorCheck = await copySelectedExcelText(target, 'excel-overlap-anchor-check');
-  if (!anchorCheck.ok) return anchorCheck;
-  const anchorCheckId = normalizeExcelIdValue(anchorCheck.text);
-  if (anchorCheckId !== wantedAnchor) {
-    return {
-      ok: false,
-      stage: 'excel-overlap-anchor-check',
-      reason: `Apos voltar uma linha, a celula selecionada nao era a ancora ${anchorId}; copiou "${String(anchorCheck.text || '').trim()}". Nao vou colar.`
-    };
-  }
-
-  sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
-  if (!sent.ok) return { ok: false, stage: 'excel-overlap-ui', reason: `Escape apos revalidar ancora falhou: ${sent.reason}` };
-  await delay(220);
-
-  sent = await dispatchDebuggerCtrlShiftKey(target, 'ArrowDown', 'ArrowDown', 40);
-  if (!sent.ok) return { ok: false, stage: 'excel-overlap-ui', reason: `Ctrl+Shift+Down para selecionar overlap falhou: ${sent.reason}` };
-  await delay(700);
-
-  const range = await copySelectedExcelText(target, 'excel-overlap-ui');
-  if (!range.ok) return range;
-
-  const rawLines = String(range.text || '').split(/\r?\n/);
-  if (rawLines.length > (reportIds?.length || 0) + 100 || String(range.text || '').length > 500000) {
-    return {
-      ok: false,
-      stage: 'excel-overlap-ui',
-      reason: `A selecao de IDs da Planilha ficou grande demais (${rawLines.length} linhas copiadas). Nao vou arriscar colar sem uma janela de overlap clara.`
-    };
-  }
-
-  const motherIds = parseCopiedExcelIdColumn(range.text);
-  if (!motherIds.length || motherIds[0] !== wantedAnchor) {
-    return {
-      ok: false,
-      stage: 'excel-overlap-ui',
-      reason: `A selecao de overlap nao comecou no ticket esperado ${anchorId}. Primeiro valor copiado: "${motherIds[0] || ''}".`
-    };
-  }
-
-  sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
-  if (!sent.ok) return { ok: false, stage: 'excel-overlap-ui', reason: `Escape apos copiar range de overlap falhou: ${sent.reason}` };
-  await delay(220);
-
-  sent = await dispatchDebuggerCtrlShortcut(target, 'ArrowDown', 'ArrowDown', 40);
-  if (!sent.ok) return { ok: false, stage: 'excel-overlap-ui', reason: `Ctrl+Down para selecionar ultimo ticket da Planilha falhou: ${sent.reason}` };
-  await delay(350);
-
-  const latestCell = await copySelectedExcelText(target, 'excel-overlap-latest-check');
-  if (!latestCell.ok) return latestCell;
-  const latestId = normalizeExcelIdValue(latestCell.text);
-  const rangeLatestId = motherIds[motherIds.length - 1];
-  if (latestId !== rangeLatestId) {
-    return {
-      ok: false,
-      stage: 'excel-overlap-latest-check',
-      reason: `A cauda selecionada por Ctrl+Down (${latestId || 'vazio'}) nao bate com o ultimo ID do range copiado (${rangeLatestId}). Nao vou colar.`
-    };
-  }
-
-  return {
-    ok: true,
-    stage: 'excel-overlap-ui',
-    motherIds,
-    motherLatestId: motherIds[motherIds.length - 1]
-  };
-}
-
-function validateKeyboardOverlap(reportRows, anchorId, motherIds) {
-  const reportIds = getReportIds(reportRows);
-  const normalizedAnchor = normalizeExcelIdValue(anchorId);
-  if (!reportIds.length) {
-    return { ok: false, stage: 'excel-overlap-ui', reason: 'Relatorio RA nao tem IDs normalizados para validar o overlap.' };
-  }
-  if (reportIds[0] !== normalizedAnchor) {
-    return {
-      ok: false,
-      stage: 'excel-overlap-ui',
-      reason: `O primeiro ID normalizado do relatorio (${reportIds[0]}) nao bate com a ancora esperada (${anchorId}).`
-    };
-  }
-
-  const motherLatestId = motherIds[motherIds.length - 1];
-  const reportLatestMotherIndex = reportIds.findIndex((id) => id === motherLatestId);
-  if (reportLatestMotherIndex < 0) {
-    return {
-      ok: false,
-      stage: 'excel-overlap-ui',
-      reason: `O ultimo ticket atual da Planilha Mae (${motherLatestId}) nao foi encontrado no relatorio baixado. Nao vou colar.`
-    };
-  }
-
-  const reportOverlapIds = reportIds.slice(0, reportLatestMotherIndex + 1);
-  if (motherIds.length !== reportOverlapIds.length) {
-    return {
-      ok: false,
-      stage: 'excel-overlap-ui',
-      reason: `Contagem de overlap divergente: Planilha Mae=${motherIds.length}, relatorio=${reportOverlapIds.length}. Nao vou colar.`
-    };
-  }
-
-  for (let index = 0; index < motherIds.length; index += 1) {
-    if (motherIds[index] !== reportOverlapIds[index]) {
-      return {
-        ok: false,
-        stage: 'excel-overlap-ui',
-        reason: `IDs de overlap divergiram na posicao ${index + 1}: Planilha Mae=${motherIds[index]}, relatorio=${reportOverlapIds[index]}. Nao vou colar.`
-      };
+    const filled = await fillExcelFindDialog(target, id, stage, 2);
+    if (!filled?.ok) {
+      lastReason = filled?.reason || 'Nao consegui focar/preencher o campo de busca do Excel.';
+      await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+      await delay(120);
+      continue;
     }
+    if (normalizeExcelIdValue(filled.value) !== wanted) {
+      lastReason = `Campo de busca do Excel nao confirmou o ID esperado. Esperado ${id}, valor atual "${filled.value || ''}".`;
+      await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+      await delay(120);
+      continue;
+    }
+
+    await delay(attemptWaits[attempt - 1]);
+    sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+    if (!sent.ok) return { ok: false, stage, reason: `Escape para fechar a busca falhou: ${sent.reason}` };
+    await delay(150);
+
+    const selected = await copySelectedExcelText(target, `${stage}-verify`);
+    if (!selected.ok) {
+      lastReason = selected.reason || 'Nao consegui copiar a celula selecionada para confirmar o ID.';
+      continue;
+    }
+
+    lastCopiedText = selected.text || '';
+    const selectedId = normalizeExcelIdValue(selected.text);
+    if (selectedId === wanted) {
+      return { ok: true, stage, id: wanted, copiedText: selected.text, attempts: attempt };
+    }
+    lastReason = `Tentativa ${attempt}: a celula selecionada copiou "${String(selected.text || '').trim()}".`;
   }
 
   return {
-    ok: true,
-    stage: 'excel-overlap-ui',
-    motherLatestId,
-    motherOverlapCount: motherIds.length,
-    reportOverlapCount: reportOverlapIds.length,
-    newRowsAfterOverlap: reportRows.length - reportOverlapIds.length
+    ok: false,
+    stage: `${stage}-verify`,
+    reason: `Busca do Excel nao confirmou a celula alvo apos 2 tentativas. Esperado Id HugMe ${id}, ultimo valor copiado "${String(lastCopiedText || '').trim()}". ${lastReason} Nao vou colar.`.trim()
   };
 }
 
 async function findExcelMotherSheetTabForSettings(settings) {
   const tabs = await queryTabs({});
   return tabs.find((tab) => isExcelMotherSheetTab(tab, settings)) || null;
-}
-
-function inspectExcelMotherSheetInPage(args) {
-  const { requiredColumns, worksheetName, oldestReportId, newestReportId } = args;
-
-  function normalize(value) {
-    return String(value || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
-  }
-
-  function visible(element) {
-    if (!element) return false;
-    const style = getComputedStyle(element);
-    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
-    const rect = element.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }
-
-  function getElementText(element) {
-    const values = [
-      element.getAttribute('aria-label'),
-      element.getAttribute('title'),
-      element.textContent
-    ];
-    return values.map((value) => String(value || '').trim()).find(Boolean) || '';
-  }
-
-  function getRowIndex(element) {
-    const own = element.getAttribute('aria-rowindex') || element.getAttribute('data-row');
-    if (own && Number.isFinite(Number(own))) return Number(own);
-    const row = element.closest('[aria-rowindex], [role="row"]');
-    const fromRow = row?.getAttribute('aria-rowindex') || row?.getAttribute('data-row');
-    return fromRow && Number.isFinite(Number(fromRow)) ? Number(fromRow) : null;
-  }
-
-  function getColumnIndex(element) {
-    const own = element.getAttribute('aria-colindex') || element.getAttribute('data-col');
-    if (own && Number.isFinite(Number(own))) return Number(own);
-    const cellRef = element.getAttribute('aria-label')?.match(/\b([A-Z]+)(\d+)\b/i)?.[1] || '';
-    if (cellRef) {
-      let index = 0;
-      for (const letter of cellRef.toUpperCase()) index = index * 26 + (letter.charCodeAt(0) - 64);
-      return index;
-    }
-    return null;
-  }
-
-  const bodyText = document.body?.innerText || '';
-  const normalizedBody = normalize(bodyText);
-  const worksheetVisible = !worksheetName || normalizedBody.includes(normalize(worksheetName)) ||
-    normalize(document.title).includes(normalize(worksheetName));
-
-  const candidates = Array.from(document.querySelectorAll([
-    '[role="gridcell"]',
-    '[role="columnheader"]',
-    '[aria-rowindex][aria-colindex]',
-    '[data-row][data-col]',
-    '[aria-label*="Id HugMe"]',
-    '[title*="Id HugMe"]'
-  ].join(','))).filter(visible);
-
-  const cells = [];
-  for (const element of candidates) {
-    const rowIndex = getRowIndex(element);
-    const columnIndex = getColumnIndex(element);
-    const text = getElementText(element);
-    if (!text || !Number.isFinite(rowIndex) || !Number.isFinite(columnIndex)) continue;
-    if (text.length > 300) continue;
-    cells.push({ rowIndex, columnIndex, text });
-  }
-
-  const rows = new Map();
-  for (const cell of cells) {
-    if (!rows.has(cell.rowIndex)) rows.set(cell.rowIndex, new Map());
-    const row = rows.get(cell.rowIndex);
-    if (!row.has(cell.columnIndex)) row.set(cell.columnIndex, cell.text);
-  }
-
-  const required = requiredColumns.map(normalize);
-  let headerRowIndex = null;
-  let headerColumns = [];
-
-  for (const [rowIndex, row] of rows.entries()) {
-    const byText = new Map();
-    for (const [columnIndex, text] of row.entries()) byText.set(normalize(text), columnIndex);
-    if (required.every((column) => byText.has(column))) {
-      headerRowIndex = rowIndex;
-      headerColumns = requiredColumns.map((column) => ({
-        name: column,
-        columnIndex: byText.get(normalize(column))
-      }));
-      break;
-    }
-  }
-
-  const visibleRows = [];
-  const visibleDataRows = [];
-  if (headerRowIndex !== null) {
-    const orderedHeaders = headerColumns.slice().sort((a, b) => a.columnIndex - b.columnIndex);
-    for (const [rowIndex, row] of rows.entries()) {
-      if (rowIndex <= headerRowIndex) continue;
-      const values = {};
-      let hasAny = false;
-      for (const header of orderedHeaders) {
-        const value = String(row.get(header.columnIndex) || '').trim();
-        values[header.name] = value;
-        if (value) hasAny = true;
-      }
-      visibleRows.push({ rowIndex, values, hasAny });
-      if (hasAny) visibleDataRows.push({ rowIndex, values });
-    }
-  }
-
-  const foundOldestReportId = visibleDataRows.find((row) => row.values['Id HugMe'] === oldestReportId) || null;
-  const foundNewestReportId = visibleDataRows.find((row) => row.values['Id HugMe'] === newestReportId) || null;
-  const lastVisibleDataRow = visibleDataRows[visibleDataRows.length - 1] || null;
-  const blankRowsAfterLastData = lastVisibleDataRow
-    ? visibleRows.filter((row) => row.rowIndex > lastVisibleDataRow.rowIndex && !row.hasAny).length
-    : 0;
-  const requiredHeadersInBody = requiredColumns.filter((column) => normalizedBody.includes(normalize(column)));
-
-  return {
-    ok: true,
-    stage: 'excel-inspect',
-    url: location.href,
-    title: document.title,
-    worksheetName,
-    worksheetVisible,
-    candidateCellCount: cells.length,
-    readableRowCount: rows.size,
-    headerRowIndex,
-    headerColumns,
-    visibleDataRowCount: visibleDataRows.length,
-    visibleFirstDataRowIndex: visibleDataRows[0]?.rowIndex || null,
-    visibleLastDataRowIndex: visibleDataRows[visibleDataRows.length - 1]?.rowIndex || null,
-    foundOldestReportIdRow: foundOldestReportId?.rowIndex || null,
-    foundNewestReportIdRow: foundNewestReportId?.rowIndex || null,
-    lastVisibleMotherId: lastVisibleDataRow?.values?.['Id HugMe'] || '',
-    blankRowsAfterLastData,
-    visibleDataRows: visibleDataRows.map((row) => ({
-      rowIndex: row.rowIndex,
-      id: row.values['Id HugMe'] || '',
-      date: row.values['Data Reclamação'] || row.values['Data ReclamaÃ§Ã£o'] || ''
-    })),
-    requiredHeadersInBody
-  };
-}
-
-function validateExcelInspection(inspection, report) {
-  if (!inspection?.ok) return inspection || { ok: false, stage: 'excel-inspect', reason: 'Inspecao do Excel nao retornou resultado.' };
-
-  if (!inspection.candidateCellCount) {
-    return {
-      ok: false,
-      stage: 'excel-inspect',
-      reason: 'Excel Web nao expos celulas legiveis para a extensao mesmo apos ativar a aba e inspecionar frames. Nao vou escrever sem conseguir validar cabecalhos/linhas.'
-    };
-  }
-
-  if (inspection.headerRowIndex === null) {
-    const visibleHeaders = inspection.requiredHeadersInBody?.length || 0;
-    const worksheetSuffix = inspection.worksheetVisible
-      ? ''
-      : ` A worksheet "${inspection.worksheetName}" tambem nao ficou visivel no DOM do Excel Web.`;
-    const suffix = visibleHeaders
-      ? ` Vi ${visibleHeaders}/${RABI_TARGET_COLUMNS.length} cabecalhos no texto da pagina, mas nao consegui mapear posicoes de celulas.`
-      : '';
-    return {
-      ok: false,
-      stage: 'excel-headers',
-      reason: `Nao consegui confirmar os 9 cabecalhos da planilha mae por celulas no Excel Web.${suffix}${worksheetSuffix}`
-    };
-  }
-
-  const mappedHeaders = new Set((inspection.headerColumns || []).map((column) => normalizeExcelHeader(column.name)));
-  const missing = RABI_TARGET_COLUMNS.filter((column) => !mappedHeaders.has(normalizeExcelHeader(column)));
-  if (missing.length) {
-    return {
-      ok: false,
-      stage: 'excel-headers',
-      reason: `Cabecalhos obrigatorios ausentes na planilha mae: ${missing.join(', ')}.`
-    };
-  }
-
-  const headerPositions = (inspection.headerColumns || []).map((column) => column.columnIndex);
-  for (let index = 1; index < headerPositions.length; index += 1) {
-    if (headerPositions[index] !== headerPositions[index - 1] + 1) {
-      return {
-        ok: false,
-        stage: 'excel-headers',
-        reason: 'Os 9 cabecalhos da planilha mae nao estao contiguos na ordem esperada; nao e seguro colar um bloco TSV unico.'
-      };
-    }
-  }
-
-  if (!inspection.visibleDataRowCount) {
-    return {
-      ok: false,
-      stage: 'excel-data-window',
-      reason: 'Cabecalhos confirmados, mas nenhuma linha de dados ficou legivel no Excel Web para calcular o ponto de substituicao.'
-    };
-  }
-
-  const oldestId = report.firstId || report.rows?.[0]?.['Id HugMe'];
-  if (!inspection.foundOldestReportIdRow) {
-    return {
-      ok: false,
-      stage: 'excel-anchor',
-      reason: `Cabecalhos confirmados, mas o ticket mais antigo do relatorio (${oldestId}) nao apareceu na janela legivel do Excel. Ainda nao e seguro calcular replace/append sem ler a cauda completa da planilha.`
-    };
-  }
-
-  return { ok: true };
-}
-
-function buildExcelDryRunPlan(inspection, report) {
-  const validation = validateExcelInspection(inspection, report);
-  if (!validation.ok) return validation;
-
-  const targetRow = inspection.foundOldestReportIdRow;
-  const targetColumn = Math.min(...(inspection.headerColumns || []).map((column) => column.columnIndex));
-  const reportRows = report.rows || [];
-  const visibleDataRows = inspection.visibleDataRows || [];
-  const anchorIndex = visibleDataRows.findIndex((row) => row.id === getRowId(reportRows[0]));
-  const motherLatestId = inspection.lastVisibleMotherId;
-  const reportLatestMotherIndex = reportRows.findIndex((row) => getRowId(row) === motherLatestId);
-  const visibleOverlapCount = anchorIndex >= 0 ? visibleDataRows.length - anchorIndex : 0;
-  const reportOverlapCount = reportLatestMotherIndex >= 0 ? reportLatestMotherIndex + 1 : 0;
-  const firstDate = getReportDateMs(reportRows[0]);
-  const lastDate = getReportDateMs(reportRows[reportRows.length - 1]);
-  const tsv = buildRowsTsv(reportRows);
-
-  if (!motherLatestId) {
-    return {
-      ok: false,
-      stage: 'excel-overlap',
-      reason: 'Nao consegui identificar o ultimo ticket visivel da planilha mae para validar o overlap.'
-    };
-  }
-
-  if (!inspection.blankRowsAfterLastData) {
-    return {
-      ok: false,
-      stage: 'excel-overlap',
-      reason: `A janela legivel do Excel termina no ticket ${motherLatestId}, mas nao ha linha vazia visivel depois dele; nao consigo provar que ele e a cauda atual da planilha mae.`
-    };
-  }
-
-  if (reportLatestMotherIndex < 0) {
-    return {
-      ok: false,
-      stage: 'excel-overlap',
-      reason: `O ultimo ticket visivel da planilha mae (${motherLatestId}) nao foi encontrado no relatorio baixado.`
-    };
-  }
-
-  if (visibleOverlapCount !== reportOverlapCount) {
-    return {
-      ok: false,
-      stage: 'excel-overlap',
-      reason: `Contagem de overlap divergente: planilha mae=${visibleOverlapCount}, relatorio=${reportOverlapCount}. Nao vou colar.`
-    };
-  }
-
-  return {
-    ok: true,
-    stage: 'excel-dry-run',
-    targetRow,
-    targetColumn,
-    reportRowCount: reportRows.length,
-    reportColumnCount: RABI_TARGET_COLUMNS.length,
-    firstReportId: report.firstId,
-    lastReportId: report.lastId,
-    motherLatestId,
-    visibleOverlapCount,
-    reportOverlapCount,
-    firstReportDateMs: firstDate,
-    lastReportDateMs: lastDate,
-    headerRowIndex: inspection.headerRowIndex,
-    visibleDataRowCount: inspection.visibleDataRowCount,
-    clipboardTextLength: tsv.length,
-    message: `Excel validado: cabecalhos OK, ancora na linha ${targetRow}. Proxima etapa: colar ${reportRows.length} linhas x ${RABI_TARGET_COLUMNS.length} colunas.`
-  };
-}
-
-function selectExcelTargetCellInPage(args) {
-  const { targetRow, targetColumn } = args;
-
-  function visible(element) {
-    if (!element) return false;
-    const style = getComputedStyle(element);
-    const rect = element.getBoundingClientRect();
-    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
-  }
-
-  function getRowIndex(element) {
-    const own = element.getAttribute('aria-rowindex') || element.getAttribute('data-row');
-    if (own && Number.isFinite(Number(own))) return Number(own);
-    const row = element.closest('[aria-rowindex], [role="row"]');
-    const fromRow = row?.getAttribute('aria-rowindex') || row?.getAttribute('data-row');
-    return fromRow && Number.isFinite(Number(fromRow)) ? Number(fromRow) : null;
-  }
-
-  function getColumnIndex(element) {
-    const own = element.getAttribute('aria-colindex') || element.getAttribute('data-col');
-    if (own && Number.isFinite(Number(own))) return Number(own);
-    return null;
-  }
-
-  const candidates = Array.from(document.querySelectorAll([
-    '[role="gridcell"]',
-    '[aria-rowindex][aria-colindex]',
-    '[data-row][data-col]'
-  ].join(','))).filter(visible);
-
-  const target = candidates.find((element) => {
-    return getRowIndex(element) === targetRow && getColumnIndex(element) === targetColumn;
-  });
-
-  if (!target) {
-    return {
-      ok: false,
-      stage: 'excel-select',
-      reason: `Nao encontrei a celula alvo visivel no Excel Web (linha ${targetRow}, coluna ${targetColumn}).`
-    };
-  }
-
-  target.scrollIntoView({ block: 'center', inline: 'center' });
-  target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
-  target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-  target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
-  target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-  target.click();
-  target.focus?.();
-
-  return {
-    ok: true,
-    stage: 'excel-select',
-    targetRow,
-    targetColumn
-  };
 }
 
 async function applyExcelWorkbookUpdate(preferredExcelTabId = null) {
@@ -935,12 +440,7 @@ async function applyExcelWorkbookUpdate(preferredExcelTabId = null) {
     };
   }
 
-  const plan = await prepareExcelDryRun(excelTab.id, report, settings);
-  if (!plan.ok) {
-    return applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan);
-  }
-
-  return applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan);
+  return applyExcelWorkbookUpdateViaKeyboard(excelTab, report, null);
 }
 
 async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null) {
@@ -948,13 +448,13 @@ async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null
   const reportRows = report.rows || [];
   const anchorId = report.firstId || getRowId(reportRows[0]);
   const tsv = buildRowsTsv(reportRows);
-  const reportIds = getReportIds(reportRows);
 
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Assumindo foco da Planilha Mae...' });
   await focusWindow(excelTab.windowId);
   await activateTab(excelTab.id);
-  await delay(900);
+  await delay(500);
 
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Confirmando worksheet da Planilha Mae...' });
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Confirmando aba Relatorio de Tickets...' });
   const worksheet = await verifyExcelWorksheetReady(excelTab.id, settings);
   if (!worksheet.ok) return worksheet;
 
@@ -968,10 +468,8 @@ async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null
     };
   }
 
-  let overlapResult = null;
-
   try {
-    await setRaBiWorkflowStatus({ running: true, activeText: `Procurando ticket ${anchorId} na Planilha Mae...` });
+    await setRaBiWorkflowStatus({ running: true, activeText: `Procurando ID ancora ${anchorId} na Planilha...` });
     let sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
     if (!sent.ok) return { ok: false, stage: 'excel-keyboard', reason: `Escape via debugger falhou: ${sent.reason}` };
     await delay(150);
@@ -979,28 +477,12 @@ async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null
     let found = await findExcelIdWithSearch(target, anchorId, 'excel-find-anchor');
     if (!found.ok) return found;
 
-    await setRaBiWorkflowStatus({ running: true, activeText: 'Validando overlap de IDs na Planilha Mae...' });
-    const overlapRange = await readMotherOverlapIdsFromAnchor(target, anchorId, reportIds);
-    if (!overlapRange.ok) return overlapRange;
-    const overlap = validateKeyboardOverlap(reportRows, anchorId, overlapRange.motherIds);
-    if (!overlap.ok) return overlap;
-    overlapResult = overlap;
-
-    await setRaBiWorkflowStatus({
-      running: true,
-      activeText: `Overlap validado: ${overlap.motherOverlapCount} linhas. Reposicionando ancora...`
-    });
-    found = await findExcelIdWithSearch(target, anchorId, 'excel-refind-anchor');
-    if (!found.ok) return found;
-
-    await setRaBiWorkflowStatus({ running: true, activeText: `Colando ${reportRows.length} linhas na Planilha Mae...` });
+    await setRaBiWorkflowStatus({ running: true, activeText: `Colando ${reportRows.length} linhas do relatorio...` });
     sent = await copyText(tsv);
     if (!sent.ok) return { ...sent, stage: 'clipboard' };
     sent = await dispatchDebuggerCtrlShortcut(target, 'v', 'KeyV', 86);
     if (!sent.ok) return { ok: false, stage: 'excel-paste', reason: `Ctrl+V na planilha falhou: ${sent.reason}` };
-    await delay(900);
-    sent = await dispatchDebuggerKey(target, 'Enter', 'Enter', 13);
-    if (!sent.ok) return { ok: false, stage: 'excel-paste', reason: `Enter apos paste falhou: ${sent.reason}` };
+    await delay(300);
   } finally {
     await runFunctionInTab(target.tabId, restoreRaBiPopupInPage, []);
     await debuggerDetach(target);
@@ -1012,73 +494,10 @@ async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null
     targetAnchorId: anchorId,
     reportRowCount: reportRows.length,
     reportColumnCount: RABI_TARGET_COLUMNS.length,
-    motherLatestId: overlapResult?.motherLatestId || '',
-    motherOverlapCount: overlapResult?.motherOverlapCount || 0,
-    reportOverlapCount: overlapResult?.reportOverlapCount || 0,
     usedKeyboardFallback: !plan?.ok,
     plan,
-    message: `Colei ${reportRows.length} linhas x ${RABI_TARGET_COLUMNS.length} colunas na Planilha Mae apos validar o overlap pelo ID ${anchorId}.`
+    message: `Colei ${reportRows.length} linhas x ${RABI_TARGET_COLUMNS.length} colunas na Planilha Mae a partir do ID ancora ${anchorId}.`
   };
-}
-
-async function prepareExcelDryRun(excelTabId, report, settings) {
-  if (!Number.isInteger(excelTabId)) {
-    return { ok: false, stage: 'excel-tab', reason: 'Aba do Excel nao informada para inspecao.' };
-  }
-  if (!report?.rows?.length) {
-    return { ok: false, stage: 'excel-report', reason: 'Nenhum relatorio RA normalizado esta disponivel para reconciliar.' };
-  }
-
-  const excelTab = await getTab(excelTabId);
-  if (excelTab) {
-    await focusWindow(excelTab.windowId);
-    await activateTab(excelTab.id);
-    await delay(1200);
-  }
-
-  await waitForTabComplete(excelTabId, 15000);
-  const inspectArgs = {
-    requiredColumns: RABI_TARGET_COLUMNS,
-    worksheetName: settings?.excelWorksheetName || '',
-    oldestReportId: report.firstId || report.rows[0]['Id HugMe'],
-    newestReportId: report.lastId || report.rows[report.rows.length - 1]['Id HugMe']
-  };
-
-  let inspection = null;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const frameInspection = await runFunctionInTabFrames(excelTabId, inspectExcelMotherSheetInPage, [inspectArgs]);
-    if (!frameInspection.ok) {
-      inspection = frameInspection;
-    } else {
-      const candidates = frameInspection.results
-        .map((item) => ({ ...(item.result || {}), frameId: item.frameId }))
-        .filter((item) => item?.ok);
-      inspection = candidates
-        .slice()
-        .sort((a, b) => {
-          const aScore = (a.headerRowIndex !== null ? 100000 : 0) + (a.candidateCellCount || 0) + (a.requiredHeadersInBody?.length || 0);
-          const bScore = (b.headerRowIndex !== null ? 100000 : 0) + (b.candidateCellCount || 0) + (b.requiredHeadersInBody?.length || 0);
-          return bScore - aScore;
-        })[0] || {
-          ok: false,
-          stage: 'excel-inspect',
-          reason: 'Nenhum frame acessivel do Excel Web retornou informacoes de planilha.'
-        };
-    }
-
-    if (inspection?.ok && (inspection.candidateCellCount || inspection.headerRowIndex !== null)) break;
-    await delay(1000);
-  }
-
-  if (!inspection.ok) {
-    return {
-      ok: false,
-      stage: 'excel-inspect',
-      reason: inspection.reason || 'Nao foi possivel inspecionar a aba do Excel Web.'
-    };
-  }
-
-  return buildExcelDryRunPlan(inspection, report);
 }
 
 async function prepareExcelWorkbook(preferredExcelTabId = null) {
@@ -1104,13 +523,24 @@ async function prepareExcelWorkbook(preferredExcelTabId = null) {
     };
   }
 
-  return prepareExcelDryRun(excelTab.id, report, settings);
+  const worksheet = await verifyExcelWorksheetReady(excelTab.id, settings);
+  if (!worksheet.ok) return worksheet;
+
+  return {
+    ok: true,
+    stage: 'excel-ready',
+    reportRowCount: report.rows.length,
+    reportColumnCount: RABI_TARGET_COLUMNS.length,
+    firstReportId: report.firstId || getRowId(report.rows[0]),
+    worksheetName: worksheet.worksheetName,
+    message: `Planilha Mae pronta: aba ${worksheet.worksheetName || getExpectedExcelWorksheetName(settings)} confirmada. Proxima etapa: RA > BI pode procurar o ID ancora e colar ${report.rows.length} linhas.`
+  };
 }
 
 async function copyPreparedRowsToClipboard(rowsText) {
   const text = String(rowsText ?? '');
   if (!text) {
-    return { ok: false, stage: 'clipboard', reason: 'No prepared rows were provided.' };
+    return { ok: false, stage: 'clipboard', reason: 'Nenhuma linha preparada foi informada para copiar.' };
   }
 
   const result = await copyText(text);

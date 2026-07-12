@@ -1,7 +1,6 @@
 // RaBiTool workflow orchestration scaffold.
 const RABITOOL_ACTIONS = {
   START_RA_TO_EXCEL: 'RABITOOL_START_RA_TO_EXCEL',
-  TEST_PASTE_FIXED_XLSX: 'RABITOOL_TEST_PASTE_FIXED_XLSX',
   PREPARE_RA_EXPORT: 'RABITOOL_PREPARE_RA_EXPORT',
   CHECK_RA_DOWNLOAD: 'RABITOOL_CHECK_RA_DOWNLOAD',
   PREPARE_EXCEL_IMPORT: 'RABITOOL_PREPARE_EXCEL_IMPORT'
@@ -94,19 +93,6 @@ async function startRaToExcelWorkflow() {
     return result;
   } catch (error) {
     const result = { ok: false, stage: 'workflow', reason: error?.message || String(error) || 'Erro inesperado no workflow.' };
-    await finishRaBiWorkflow(result);
-    return result;
-  }
-}
-
-async function testPasteFixedXlsxWorkflow() {
-  await beginRaBiWorkflow('Lendo XLSX fixo de teste...');
-  try {
-    const result = await testPasteFixedDownloadedReport();
-    await finishRaBiWorkflow(result);
-    return result;
-  } catch (error) {
-    const result = { ok: false, stage: 'workflow', reason: error?.message || String(error) || 'Erro inesperado no teste de paste.' };
     await finishRaBiWorkflow(result);
     return result;
   }

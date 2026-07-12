@@ -1,6 +1,7 @@
 // RaBiTool service worker module.
 const SETTINGS_KEY = 'rabiToolSettings';
 const WORKSPACE_TABS_KEY = 'rabiToolWorkspaceTabs';
+const WORKSPACE_REFRESH_MARK_KEY = 'rabiToolWorkspaceRefreshMark';
 const WORKFLOW_STATUS_KEY = 'rabiToolWorkflowStatus';
 const DEFAULT_SETTINGS = {
   enabled: false,

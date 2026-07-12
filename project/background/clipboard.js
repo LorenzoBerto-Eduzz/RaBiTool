@@ -38,7 +38,7 @@ async function copyText(text) {
         resolve({ ok: false, reason: chrome.runtime.lastError.message });
         return;
       }
-      resolve(response || { ok: false, reason: 'No clipboard response.' });
+      resolve(response || { ok: false, reason: 'Clipboard nao respondeu.' });
     });
   });
 }
@@ -103,7 +103,7 @@ async function readText(options = {}) {
         resolve({ ok: false, reason: chrome.runtime.lastError.message });
         return;
       }
-      resolve(response || { ok: false, reason: 'No clipboard read response.' });
+      resolve(response || { ok: false, reason: 'Leitura do clipboard nao respondeu.' });
     });
   });
 

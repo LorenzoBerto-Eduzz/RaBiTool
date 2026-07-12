@@ -38,6 +38,7 @@
   let lastWorkspaceRenderSignature = '';
   let lastRenderedNoticesSignature = '';
   let settings = { ...DEFAULT_SETTINGS, shortcuts: { ...DEFAULT_SETTINGS.shortcuts } };
+  let extensionContextValid = true;
 
   function isSupportedPage() {
     return ['http:', 'https:', 'file:'].includes(location.protocol);
@@ -85,15 +86,46 @@
 
   function sendMessage(message) {
     return new Promise((resolve) => {
+      if (!extensionContextValid || !hasExtensionRuntime()) return resolve(null);
       try {
         chrome.runtime.sendMessage(message, (response) => {
           if (chrome.runtime.lastError) return resolve(null);
           resolve(response || null);
         });
-      } catch {
+      } catch (error) {
+        handleExtensionContextError(error);
         resolve(null);
       }
     });
+  }
+
+  function handleExtensionContextError(error) {
+    const message = String(error?.message || error || '');
+    if (!message.includes('Extension context invalidated') && hasExtensionRuntime()) return;
+    extensionContextValid = false;
+    stopWorkspacePolling();
+  }
+
+  function hasExtensionRuntime() {
+    return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+  }
+
+  function storageGet(keys, callback) {
+    if (!extensionContextValid || !hasExtensionRuntime()) return;
+    try {
+      chrome.storage.local.get(keys, callback);
+    } catch (error) {
+      handleExtensionContextError(error);
+    }
+  }
+
+  function storageSet(values) {
+    if (!extensionContextValid || !hasExtensionRuntime()) return;
+    try {
+      chrome.storage.local.set(values);
+    } catch (error) {
+      handleExtensionContextError(error);
+    }
   }
 
   function ensureStyle() {
@@ -121,7 +153,7 @@
     popup.style.top = `${top}px`;
     popup.style.right = 'auto';
     popup.style.bottom = 'auto';
-    if (save) chrome.storage.local.set({ [POSITION_KEY]: { left, top } });
+    if (save) storageSet({ [POSITION_KEY]: { left, top } });
   }
 
   function bindDragging() {
@@ -166,7 +198,6 @@
     });
     popup.querySelector('#csh-btn-gear')?.addEventListener('click', () => sendMessage({ action: 'OPEN_OPTIONS' }));
     popup.querySelector('#csh-btn-run')?.addEventListener('click', () => runWorkflowButton('RABITOOL_START_RA_TO_EXCEL'));
-    popup.querySelector('#csh-btn-test-paste')?.addEventListener('click', () => runWorkflowButton('RABITOOL_TEST_PASTE_FIXED_XLSX'));
     popup.querySelector('#csh-btn-tab-ra')?.addEventListener('click', () => focusWorkspaceTab('ra'));
     popup.querySelector('#csh-btn-tab-bi')?.addEventListener('click', () => focusWorkspaceTab('bi'));
   }
@@ -326,7 +357,7 @@
   }
 
   function refreshWorkflowStatus() {
-    chrome.storage.local.get(WORKFLOW_STATUS_KEY, (data) => {
+    storageGet(WORKFLOW_STATUS_KEY, (data) => {
       renderWorkflowStatus(data?.[WORKFLOW_STATUS_KEY] || null);
     });
   }
@@ -375,7 +406,7 @@
     lastWorkspaceRenderSignature = '';
     lastRenderedNoticesSignature = '';
 
-    chrome.storage.local.get(POSITION_KEY, (data) => {
+    storageGet(POSITION_KEY, (data) => {
       const pos = data?.[POSITION_KEY];
       if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
         popupAnchoredTopRight = false;
@@ -431,36 +462,40 @@
   }
 
   function loadInitialState() {
-    chrome.storage.local.get(['enabled', SETTINGS_KEY], (data) => {
+    storageGet(['enabled', SETTINGS_KEY], (data) => {
       settings = withDefaultSettings(data[SETTINGS_KEY]);
       enabled = data.enabled === true && settings.enabled !== false;
       if (enabled) createPopup();
     });
   }
 
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    if (changes[SETTINGS_KEY]) settings = withDefaultSettings(changes[SETTINGS_KEY].newValue);
-    if (changes[WORKFLOW_STATUS_KEY]) renderWorkflowStatus(changes[WORKFLOW_STATUS_KEY].newValue || null);
-    if (changes.enabled) {
-      enabled = changes.enabled.newValue === true;
-      if (enabled) createPopup({ autofocusRun: true });
-      else removePopup();
-    }
-  });
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      if (changes[SETTINGS_KEY]) settings = withDefaultSettings(changes[SETTINGS_KEY].newValue);
+      if (changes[WORKFLOW_STATUS_KEY]) renderWorkflowStatus(changes[WORKFLOW_STATUS_KEY].newValue || null);
+      if (changes.enabled) {
+        enabled = changes.enabled.newValue === true;
+        if (enabled) createPopup({ autofocusRun: true });
+        else removePopup();
+      }
+    });
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.action === 'REFRESH_RABITOOL_POPUP') {
-      sendResponse({ ok: true });
-      return true;
-    }
-    if (message?.action === 'TOGGLE_RABITOOL_POPUP') {
-      togglePopup();
-      sendResponse({ ok: true });
-      return true;
-    }
-    return false;
-  });
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.action === 'REFRESH_RABITOOL_POPUP') {
+        sendResponse({ ok: true });
+        return true;
+      }
+      if (message?.action === 'TOGGLE_RABITOOL_POPUP') {
+        togglePopup();
+        sendResponse({ ok: true });
+        return true;
+      }
+      return false;
+    });
+  } catch (error) {
+    handleExtensionContextError(error);
+  }
 
   document.addEventListener('keydown', handleShortcut, true);
   window.addEventListener('resize', () => clampPopup(false));

@@ -26,27 +26,29 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 - Destination: Excel Web mother sheet.
 - First implementation style: browser UI automation.
 - No API/OAuth path for the initial build.
-- Activation opens/reuses the HugMe export tab and Planilha/mother-sheet tab inactive to the side and tracks their tab IDs.
+- Activation prepares reserved HugMe export and Planilha/mother-sheet tabs inactive to the side and tracks their tab IDs.
+- RaBiTool groups its assigned tabs as `RaBiTool` when Chrome allows it. Chrome only supports named tab-group colors, so the group uses Chrome's `green` color as the closest match to the `RA > BI` button.
+- RaBiTool reuses only the tab/group IDs it recorded for the current extension load. It does not attach to random already-open HugMe/Planilha tabs, and it ignores old groups that happen to be named `RaBiTool` after an extension reload/install.
 - Tracked tabs should stay smart: if login/auth appears, show blocked; after login succeeds and lands elsewhere, send the same tab back to the target HugMe/Planilha URL automatically.
-- If either required tab is missing/not ready, the tool should stop with `Abas do HugMe e Planilha Mae nao preparadas` or with a more specific HugMe/Planilha readiness warning.
+- If either reserved tab is missing when `RA > BI` starts, the tool should recreate/reassign it, wait for readiness, and then proceed. If it still cannot prepare required tabs, it should stop with `Abas reservadas do HugMe e Planilha Mae nao preparadas` or with a more specific HugMe/Planilha readiness warning.
 - If a tab exists but required elements are still loading, wait briefly; if still missing, stop with a clear error.
-- Expected destination behavior: replace rows or append rows, to be specified by the owner.
+- Current destination behavior: find the oldest incoming report ticket in the mother sheet, verify that Excel selected that exact anchor, then paste the normalized report rows from that row downward.
 - The tool handles two spreadsheet objects: a fresh incoming RA report and a large existing mother sheet.
 - The sample workbook was only a structural teaching example: `Sheet1` showed the mother-sheet layout, and `Sheet2` showed a downloaded report layout.
 - This is business-level data automation; the tool should stop when uncertain rather than risking mismatched rows.
 - Current mother-sheet contract is exactly 9 columns, matching the downstream reader's current needs.
 - The report is definitive for those 9 mapped columns, so blanks from the report also overwrite existing mother-sheet values.
-- Both the report and mother sheet must be sorted oldest to newest by `Data Reclamação`; this is a required safety guard.
-- If the report is fully newer than the mother sheet, append the normalized rows at the end.
+- The report must be sorted oldest to newest by `Data Reclamação`; this is a required safety guard. The mother sheet is expected to stay in the same order, but the current UI-only Excel path cannot fully inspect global sheet sorting.
+- Append fallback is not active in the current release path. If the oldest incoming report ID cannot be found and verified in the mother sheet, the tool blocks instead of guessing a destination.
 - Once all validation guards pass, the owner wants the workflow to proceed automatically and quickly.
 - Development should move toward the real RA report generation/download flow early, while still keeping parser/reconciliation modules clean and testable.
 - RA report setup uses `Data Reclamação` with order type `ascendente`, so latest rows are at the bottom like the mother sheet.
-- RA processing should be checked every 2 seconds and blocked after 420 seconds if the report is not downloadable.
-- Current build continues through download, XLSX validation, guarded Excel Web worksheet confirmation, keyboard-based overlap validation, TSV preparation, clipboard copy, and one-block paste when safe.
+- RA processing is watched inside the HugMe page up to every 1 second and blocked after 420 seconds if the report is not downloadable.
+- Current build continues through download, XLSX validation, guarded Excel Web worksheet confirmation, keyboard-based anchor verification, TSV preparation, clipboard copy, and one-block paste when safe.
 - Excel Web phase currently must focus/activate the Planilha tab because Excel Find, selection, copy, clipboard read, and paste are tied to the active workbook surface. This is acceptable for now as long as the popup makes the step clear, for example `Validando Planilha Mae...` followed by an explicit focus/paste status.
-- Before writing, the tool now checks that the active Excel worksheet is the configured destination, currently `Relatorio de Tickets`; if not, it blocks before search/paste.
+- Before writing, the tool checks that the active Excel worksheet is the configured destination, currently `Relatorio de Tickets`; if not, it blocks before search/paste. It then searches the oldest report ID, confirms the selected cell, pastes there, and does not press Enter after paste.
 - Future Excel Web writing should prefer a single contiguous paste action, so the owner can use one `Ctrl+Z` in Excel Web to revert the extension's write during review/testing.
-- Owner prefers the extension to work on existing RA/Excel tabs in the background without switching/focusing them. If Excel Web later proves that final paste requires focus, the tool should state that clearly rather than silently stealing view.
+- The extension should avoid using arbitrary existing RA/Excel tabs. Excel Web paste currently requires focusing the reserved Planilha tab; the popup should keep this step explicit rather than silently stealing view.
 
 ## Popup Direction
 
@@ -62,8 +64,8 @@ After the owner tests the guarded Planilha flow, continue with refinement of the
 
 1. Confirm required columns and validation rules.
 2. `Id HugMe` is confirmed as the unique ticket/case key.
-3. First replacement approach is to find the oldest incoming report ticket in the mother sheet, validate the overlap through the current mother-sheet tail, then replace from that row downward.
-4. Define final edge cases: missing current latest mother-sheet ticket in the report, unexpected older report rows, optional blank fields, and whether a preview/confirmation is required.
+3. Current replacement approach is to find the oldest incoming report ticket in the mother sheet, verify that Excel selected that exact anchor ID, then paste from that row downward.
+4. Define final edge cases: missing oldest incoming report ID in the mother sheet, clearly newer reports that might later append, optional blank fields, and whether a preview/confirmation is required.
 5. Define what warnings/errors should block execution.
 6. Refine popup statuses so each blocking/current step is clear during focused Excel automation.
 
@@ -80,14 +82,9 @@ After the owner tests the guarded Planilha flow, continue with refinement of the
 
 ## Details Still Needed
 
-- Exact RA URL and filters.
-- Exact RA button sequence to export the XLSX.
-- XLSX column layout using fake examples.
-- Excel workbook URL.
-- Excel worksheet/tab name.
-- Target range/start cell.
-- Whether the import should replace, clear/rebuild, or append.
-- Row mapping rules.
+- Whether to implement append-only fallback when the oldest incoming report ID is not found.
+- Whether to add post-paste validation beyond the current anchor guard.
+- Whether to narrow permissions from discovery-wide host access to only HugMe/Excel hosts.
 
 ## Owner Commands
 

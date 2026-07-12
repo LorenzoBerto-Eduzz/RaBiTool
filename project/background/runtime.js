@@ -1,7 +1,6 @@
 // Runtime message routing and workflow registration.
 const WORKFLOW_RUNNERS = {
   [RABITOOL_ACTIONS.START_RA_TO_EXCEL]: startRaToExcelWorkflow,
-  [RABITOOL_ACTIONS.TEST_PASTE_FIXED_XLSX]: testPasteFixedXlsxWorkflow,
   [RABITOOL_ACTIONS.PREPARE_RA_EXPORT]: prepareRaExportWorkflow,
   [RABITOOL_ACTIONS.CHECK_RA_DOWNLOAD]: checkRaDownloadWorkflow,
   [RABITOOL_ACTIONS.PREPARE_EXCEL_IMPORT]: prepareExcelImportWorkflow
@@ -14,20 +13,20 @@ function runWorkflowAction(action, message, sender) {
 
 function openSideTab(url, openerTab, callback) {
   const safeUrl = String(url || '').trim();
-  if (!safeUrl) return callback?.({ ok: false, reason: 'NO_URL' });
+  if (!safeUrl) return callback?.({ ok: false, reason: 'URL nao informada.' });
   const props = { url: safeUrl, active: false };
   if (Number.isInteger(openerTab?.id)) props.openerTabId = openerTab.id;
   if (Number.isInteger(openerTab?.index)) props.index = openerTab.index + 1;
   chrome.tabs.create(props, (tab) => {
-    if (chrome.runtime.lastError || !tab) return callback?.({ ok: false, reason: 'OPEN_FAILED' });
+    if (chrome.runtime.lastError || !tab) return callback?.({ ok: false, reason: 'Nao consegui abrir a aba solicitada.' });
     callback?.({ ok: true, tabId: tab.id });
   });
 }
 
 function sendToTab(tabId, message, callback) {
-  if (!Number.isInteger(tabId)) return callback?.({ ok: false, reason: 'NO_TAB' });
+  if (!Number.isInteger(tabId)) return callback?.({ ok: false, reason: 'Aba nao informada.' });
   chrome.tabs.sendMessage(tabId, message, (response) => {
-    if (chrome.runtime.lastError) return callback?.({ ok: false, reason: 'CONTENT_UNAVAILABLE' });
+    if (chrome.runtime.lastError) return callback?.({ ok: false, reason: 'Popup/conteudo da aba nao esta disponivel.' });
     callback?.(response || { ok: true });
   });
 }
@@ -49,7 +48,7 @@ chrome.action?.onClicked?.addListener((tab) => {
     chrome.storage.local.set({ enabled: nextEnabled, [SETTINGS_KEY]: settings }, () => {
       if (nextEnabled) {
         clearFinishedRaBiWorkflowStatus();
-        ensureWorkspaceTabs(tab);
+        ensureWorkspaceTabs(tab, { forceNew: true });
       }
     });
   });
@@ -70,7 +69,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.storage.local.set({ enabled, [SETTINGS_KEY]: settings }, () => {
         if (enabled) {
           clearFinishedRaBiWorkflowStatus();
-          ensureWorkspaceTabs(sender.tab);
+          ensureWorkspaceTabs(sender.tab, { forceNew: true });
         }
         sendResponse({ ok: !chrome.runtime.lastError });
       });

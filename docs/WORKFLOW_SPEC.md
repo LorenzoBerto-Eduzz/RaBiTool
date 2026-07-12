@@ -27,7 +27,7 @@ In production these are separate objects: a fresh downloaded report and the real
 - Export type: XLSX.
 - Destination: Excel Web.
 - Automation method: browser UI interactions, page waits, downloads, clipboard/import where needed.
-- Initial destination behavior: replace rows or append rows, exact rule pending.
+- Current destination behavior: find the oldest incoming report ticket in the mother sheet, verify the selected Excel cell equals that `Id HugMe`, then paste the normalized report rows from that anchor downward.
 - API/OAuth integration: not planned for the initial version.
 - Business requirement: stability and correctness are more important than speed or convenience. The tool should stop with a clear reason rather than guess.
 - Execution behavior: once guards pass, the owner wants the workflow to be as automatic/quick as practical, without unnecessary confirmation friction.
@@ -67,7 +67,7 @@ Current likely key fields:
 
 - Primary identity key: `Id HugMe`. Owner confirmed this is the unique ticket/case id and is the first mother-sheet column.
 - Time/order key: `Data Reclamação`.
-- Sort requirement: both the incoming report and the mother sheet must be ordered by `Data Reclamação` oldest to newest. This is a crucial safety guard because the reconciliation algorithm depends on oldest report row, current mother-sheet tail, and overlap row counts.
+- Sort requirement: the incoming report must be ordered by `Data Reclamação` oldest to newest. The mother sheet is expected to stay in the same order, but the current UI-only Excel path cannot fully inspect global sheet sorting.
 
 ## Intended Pipeline
 
@@ -82,13 +82,15 @@ Keep the workflow staged and modular:
 
 ## Tab Preconditions
 
-For the current implementation phase, RaBiTool opens/reuses the RA and mother-sheet workspace tabs when the extension is activated.
+For the current implementation phase, RaBiTool owns reserved RA and mother-sheet workspace tabs.
 
 - Chrome startup should leave the extension disabled/hidden.
-- Toolbar/action shortcut activation enables the extension and opens/reuses RA and BI tabs inactive to the side.
-- The extension tracks the tab IDs for RA and BI.
-- RAtoBI should use the tracked RA/HugMe export tab and Excel Web mother-sheet tab.
-- If either tab is missing/not ready during execution, stop before doing work and show `Abas do HugMe e Planilha Mae nao preparadas` or a more specific HugMe/Planilha readiness warning.
+- Toolbar/action shortcut activation enables the extension and prepares reserved RA and BI tabs inactive to the side.
+- The extension tracks the tab IDs for RA and BI and records the Chrome tab group ID created for the current extension load marker.
+- RaBiTool does not scan arbitrary existing HugMe/Planilha tabs for workflow use. It reuses only the tabs/group it recorded for the current load marker. A pre-existing group named `RaBiTool` from before install/reload is ignored because Chrome does not expose a reliable "created before extension reload" flag.
+- If either reserved tab was closed before execution, `RA > BI` recreates and reassigns the missing tab before doing work.
+- RAtoBI should use the reserved RA/HugMe export tab and Excel Web mother-sheet tab.
+- If reserved tabs cannot be prepared or required page state cannot be proven, stop before doing work and show `Abas reservadas do HugMe e Planilha Mae nao preparadas` or a more specific HugMe/Planilha readiness warning.
 - If the tabs exist but required page elements are not present yet, wait briefly/retry for the expected elements.
 - If required elements still do not appear after the bounded wait, stop with a clear error naming the missing stage/element.
 - The `HugMe`/`Planilha` buttons in the popup show readiness status and intentionally focus the tracked tab when clicked.
@@ -129,9 +131,9 @@ For the current implementation phase, RaBiTool opens/reuses the RA and mother-sh
 - Processing state: the current report item shows a disabled button with text `Processando relatório...`.
 - Ready state: the same report item exposes a visible `Download` button with `ng-click="download(i.id, $event)"` when `!i.processando && i.disponivel`.
 - Report metadata: item includes date, report ID text such as `ID: 4259804`, and user text.
-- Processing wait rule: check every 2 seconds for the matching report item to become downloadable.
+- Processing wait rule: an injected HugMe page watcher checks up to every 1 second for the matching report item to become downloadable.
 - Processing timeout: block after 420 seconds if the matching report is still not downloadable.
-- Expected download filename pattern: generated title plus `.xlsx`, for example `RaBiToolRelatoriohhmmssddmmyy.xlsx`; if HugMe/Chrome changes the filename, detect the fresh XLSX started after the download click.
+- Expected download filename pattern: HugMe/Chrome may prefix/suffix the generated title, for example `prefix_rabitoolrelatoriohhmmssddmmyy_suffix.xlsx`. The tool matches the generated title token `hhmmssddmmyy` inside `rabitoolrelatorio...` and also falls back to fresh XLSX detection after the click.
 - Expected columns:
 - Export edge cases:
 
@@ -159,21 +161,21 @@ Ordering note: RA should now be set to `ascendente`, matching the mother-sheet r
 After submitting `Gerar relatório`, the next source automation milestone is:
 
 1. Watch the `Meus relatórios` list for the report item whose `h5` title exactly matches the generated `RaBiToolRelatoriohhmmssddmmyy`.
-2. If the item shows `Processando relatório...`, keep waiting/polling that same item every 2 seconds.
+2. If the item shows `Processando relatório...`, keep waiting/polling that same item inside the HugMe page up to every 1 second.
 3. If the item disappears, fails to appear, expires, or cannot be uniquely identified, stop with a clear error.
 4. When the item shows a visible `Download` button, click that button for the matching item only.
 5. Use Chrome downloads tracking to detect the resulting XLSX download and associate it with this run by matching the generated title.
 6. The downloaded file becomes the incoming report for parser/reconciliation.
-7. The current build fetches/reads the completed XLSX, validates required headers/rows/unique IDs/ascending dates, stores normalized rows in service-worker memory, validates the active Excel worksheet, validates the overlap through keyboard-driven Excel Find/copy steps, and pastes one prepared TSV block when safe.
+7. The current build fetches/reads the completed XLSX, validates required headers/rows/unique IDs/ascending dates, stores normalized rows in service-worker memory, validates the active Excel worksheet, verifies the target anchor through keyboard-driven Excel Find/copy steps, and pastes one prepared TSV block when safe.
 
-Current implementation choice: poll the page every 2 seconds for up to 420 seconds. The flow now proceeds through XLSX validation and the guarded Excel Web keyboard/debugger phase. Status text should show `Preparando para gerar relatorio...` before generation and `Processando relatorio...` while the report item is processing.
+Current implementation choice: inject a HugMe page-side watcher for up to 420 seconds. When the matching report item exposes `Download`, the watcher clicks the button using both dispatched mouse events and `button.click()`. The flow then proceeds through Chrome download detection, XLSX validation, and the guarded Excel Web keyboard/debugger phase. Status text should show `Preparando para gerar relatorio...` before generation and `Processando relatorio...` while the report item is processing.
 
 ## Pending Destination Details
 
-- Excel workbook URL: configured as the SharePoint/Excel Web mother sheet URL in defaults; activation opens/reuses and tracks this tab for current v1.
+- Excel workbook URL: configured as the SharePoint/Excel Web mother sheet URL in defaults; activation and `RA > BI` prepare a reserved tracked tab for current v1.
 - Worksheet/tab name: `Relatório de Tickets`.
 - Target start cell/range: determined by locating the oldest report `Id HugMe` in the mother sheet; write should start in the matching row and the first mapped mother-sheet column.
-- Replace/append/clear behavior: replace from the oldest matching report row downward; append only if clearly newer; block when uncertain.
+- Replace/append/clear behavior: replace from the oldest matching report row downward. Append fallback is not active in the current release path, so missing anchor proof blocks execution.
 - Required formatting preservation: future writer should paste values only, preserving existing sheet formatting where Excel Web allows it.
 - Columns to fill: the 9 required mapped columns, by header name.
 - Rows to skip or keep: do not touch unrelated historical rows before the affected window.
@@ -189,13 +191,7 @@ The current sequence is:
 2. Confirm the active worksheet tab is exactly the configured worksheet, currently `Relatorio de Tickets`. The primary signal is Excel Web's sheet tab bar with `role="tab"` and `aria-selected="true"`; if the active worksheet cannot be proven, block before touching data.
 3. Use `Ctrl+F` in Excel Web, paste the oldest incoming report `Id HugMe`, and press Enter.
 4. Close Find, copy the selected cell, and verify the selected value equals the expected oldest report ID.
-5. Probe the cell below. If it is blank, the anchor is also the current mother-sheet tail and overlap count is 1.
-6. If there is data below, return to the anchor, run `Ctrl+Shift+Down`, copy the selected ID range, and count/validate the mother-sheet overlap IDs.
-7. Move to the latest selected mother-sheet ID, copy it, and confirm it matches the last copied range ID.
-8. Find that latest mother-sheet ID inside the parsed report and count report rows from the report anchor through that same ID.
-9. If mother-sheet overlap count and report overlap count differ, or any ID differs in order, block before paste.
-10. Re-find the oldest report ID in Excel Web.
-11. Copy the prepared 9-column TSV and send one `Ctrl+V`, followed by Enter, so the intended recovery path is one Excel Web `Ctrl+Z`.
+5. Copy the prepared 9-column TSV and send one `Ctrl+V` on that anchor cell, without pressing Enter afterward, so Excel does not move the selection down after paste.
 
 Known limitation: this UI-based Excel phase needs focus because Excel Web's find, selection, copy, and paste behavior is tied to the active workbook surface and browser clipboard focus rules. A fully no-focus write would require a different integration path such as Microsoft Graph or another API, which the owner has explicitly not chosen for this project.
 
@@ -204,18 +200,14 @@ Known limitation: this UI-based Excel phase needs focus because Excel Web's find
 - Confirmed first strategy: use the oldest ticket in the incoming report to locate where the report overlaps the mother sheet, then replace from that row downward with normalized report rows.
 - If the oldest incoming report ticket is found in the mother sheet, paste/replace the report-shaped rows starting on that exact mother-sheet row.
 - If the incoming report contains rows newer than the current mother-sheet tail, those rows are added below the replaced overlap.
-- If the oldest incoming report ticket is not found in the mother sheet, append the normalized report rows below the mother sheet only when the report is clearly newer than the current mother-sheet tail. The report rows are placed at the end.
+- If the oldest incoming report ticket is not found and verified in the mother sheet, the current release path blocks instead of appending. A later append fallback can be aligned separately for clearly newer reports.
 - The paste/write should include only the columns used by the mother sheet, mapped from the report headers, not all report columns.
 - The Excel Web write should be implemented as one contiguous paste action for the prepared affected range whenever possible. The intended operator recovery path is a single Excel Web `Ctrl+Z` to undo the extension's write if review/testing shows something wrong.
 - Existing rows are replaced as full mother-sheet rows for the mapped columns, because older tickets can receive updated fields later such as resolution, return-to-business, note/CSAT, assignee, tags, or client type.
 - The incoming report is authoritative for the mapped mother-sheet columns. If a mapped report field is blank, that blank should overwrite the existing mother-sheet value for that field.
-- Safety check: when the oldest report ticket is found in the mother sheet, also take the last/current most recent mother-sheet ticket and find it in the incoming report.
-- Count mother-sheet rows from the found oldest report ticket through the current most recent mother-sheet ticket.
-- Count report rows from the oldest report ticket through that same current most recent mother-sheet ticket.
-- If those counts match, the overlap is considered safe to replace.
-- If those counts do not match, stop and show an error in the popup instead of writing.
-- If the current most recent mother-sheet ticket is not found in the report, stop unless a later aligned rule explicitly allows append-only or gap behavior.
-- If either the report or mother sheet is not sorted ascending by `Data Reclamação`, stop before writing.
+- Current owner realignment: do not require overlap count equality before paste. If the mother-sheet interval has more rows than the report, the newer report may have excluded tickets; if the report interval has more rows than the mother sheet, a new ticket may have appeared inside the interval. For the current paste model, this is acceptable and should not block.
+- Current required Excel safety check is the anchor check: find the oldest report ticket in the mother sheet and verify the selected cell copies that exact `Id HugMe` before pasting.
+- If the report is not sorted ascending by `Data Reclamação`, stop before writing. The mother sheet is expected to remain ascending; the current UI-only Excel path cannot safely inspect the whole workbook to prove global sort order.
 - What should happen when the report includes older/newer rows outside the intended filter span?
 - Blank optional fields are allowed in mapped columns and should be pasted as blanks because the report is the definitive source for the replacement range.
 - Should the tool require a preview/confirmation before applying changes?
