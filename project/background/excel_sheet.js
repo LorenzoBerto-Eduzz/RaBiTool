@@ -150,6 +150,7 @@ function normalizeExcelIdValue(value) {
 }
 
 const EXCEL_FIND_ATTEMPT_WAITS_MS = [500, 1000, 1500, 2000, 2500, 3000];
+const EXCEL_SELECTED_CELL_VERIFY_WAITS_MS = [250, 500, 750, 1000, 1500, 2000];
 
 async function copySelectedExcelText(target, stage, options = {}) {
   const attempts = Math.max(1, Number(options.attempts || 1));
@@ -193,7 +194,48 @@ async function copySelectedExcelText(target, stage, options = {}) {
   };
 }
 
-function prepareExcelKeyboardFocusInPage() {
+async function verifySelectedExcelId(target, id, stage = 'excel-find-anchor') {
+  const wanted = normalizeExcelIdValue(id);
+  let lastCopiedText = '';
+  let lastReason = '';
+
+  for (let attempt = 1; attempt <= EXCEL_SELECTED_CELL_VERIFY_WAITS_MS.length; attempt += 1) {
+    const waitMs = EXCEL_SELECTED_CELL_VERIFY_WAITS_MS[attempt - 1];
+    await delay(waitMs);
+    const selected = await copySelectedExcelText(target, `${stage}-verify`, {
+      attempts: 1,
+      baseWaitMs: Math.min(800, 300 + waitMs)
+    });
+
+    if (!selected.ok) {
+      lastReason = selected.reason || 'Não consegui copiar a célula selecionada para confirmar o ID.';
+      continue;
+    }
+
+    lastCopiedText = selected.text || '';
+    const selectedId = normalizeExcelIdValue(selected.text);
+    if (selectedId === wanted) {
+      return {
+        ok: true,
+        stage,
+        id: wanted,
+        copiedText: selected.text,
+        verifyAttempts: attempt
+      };
+    }
+
+    lastReason = `Tentativa de confirmação ${attempt}: a célula selecionada copiou "${String(selected.text || '').trim()}".`;
+  }
+
+  return {
+    ok: false,
+    stage: `${stage}-verify`,
+    copiedText: lastCopiedText,
+    reason: lastReason || `A célula selecionada não confirmou o Id HugMe ${id}.`
+  };
+}
+
+function prepareExcelKeyboardFocusInPage(pointIndex = 0) {
   const popup = document.getElementById('rabi-tool-popup');
   if (popup) popup.style.display = 'none';
   try {
@@ -207,31 +249,153 @@ function prepareExcelKeyboardFocusInPage() {
     return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 80 && rect.height > 40;
   }
 
+  function textFor(element) {
+    return [
+      element.id,
+      element.getAttribute?.('role'),
+      element.getAttribute?.('aria-label'),
+      element.getAttribute?.('class')
+    ].map((value) => String(value || '').trim()).filter(Boolean).join('|').slice(0, 160);
+  }
+
+  function candidateFromElement(element, kind) {
+    const rect = element.getBoundingClientRect();
+    return {
+      element,
+      rect,
+      kind,
+      area: rect.width * rect.height,
+      top: rect.top,
+      left: rect.left,
+      label: textFor(element)
+    };
+  }
+
+  function frameOffset() {
+    let x = 0;
+    let y = 0;
+    let depth = 0;
+    let known = true;
+    try {
+      let win = window;
+      while (win && win !== win.top) {
+        const frame = win.frameElement;
+        if (!frame) {
+          known = false;
+          break;
+        }
+        const rect = frame.getBoundingClientRect();
+        x += rect.left;
+        y += rect.top;
+        depth += 1;
+        win = win.parent;
+      }
+    } catch (_) {
+      known = false;
+    }
+    return { x, y, depth, known };
+  }
+
   const selectors = [
     '[role="grid"]',
+    '[role="application"]',
+    '[role="main"]',
+    '[role="region"]',
+    '[role="presentation"]',
     '[aria-label*="grid" i]',
     '[aria-label*="sheet" i]',
     '[aria-label*="planilha" i]',
+    '[aria-label*="worksheet" i]',
+    '[aria-label*="workbook" i]',
+    '[aria-label*="célula" i]',
+    '[aria-label*="celula" i]',
+    '[aria-label*="cell" i]',
     'canvas',
+    'svg',
     '[class*="grid" i]',
     '[id*="grid" i]',
     '[class*="sheet" i]',
-    '[id*="sheet" i]'
+    '[id*="sheet" i]',
+    '[class*="worksheet" i]',
+    '[id*="worksheet" i]',
+    '[class*="workbook" i]',
+    '[id*="workbook" i]',
+    '[class*="ewa" i]',
+    '[id*="ewa" i]',
+    '[class*="canvas" i]',
+    '[id*="canvas" i]',
+    '[class*="scroll" i]',
+    '[id*="scroll" i]'
   ];
 
-  const candidates = Array.from(document.querySelectorAll(selectors.join(',')))
+  const selectorCandidates = Array.from(document.querySelectorAll(selectors.join(',')))
     .filter(visible)
-    .map((element) => {
+    .map((element) => candidateFromElement(element, 'selector'));
+
+  const broadCandidates = Array.from(document.querySelectorAll('div,section,main,canvas,svg,[role]'))
+    .filter((element) => {
+      if (!visible(element)) return false;
       const rect = element.getBoundingClientRect();
-      return { rect, area: rect.width * rect.height };
+      const enoughArea = rect.width >= Math.min(420, window.innerWidth * 0.45) && rect.height >= 120;
+      const likelyWorkbookZone = rect.bottom > window.innerHeight * 0.32 && rect.top < window.innerHeight - 80;
+      const notWholePage = rect.width < window.innerWidth * 0.995 || rect.height < window.innerHeight * 0.995;
+      return enoughArea && likelyWorkbookZone && notWholePage;
+    })
+    .map((element) => candidateFromElement(element, 'large-visible'));
+
+  const seen = new Set();
+  const candidates = [...selectorCandidates, ...broadCandidates]
+    .filter((item) => {
+      const key = `${Math.round(item.rect.left)}:${Math.round(item.rect.top)}:${Math.round(item.rect.width)}:${Math.round(item.rect.height)}:${item.label}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     })
     .sort((a, b) => b.area - a.area);
 
-  const chosen = candidates[0]?.rect;
-  const fallbackX = Math.min(Math.max(window.innerWidth * 0.42, 260), window.innerWidth - 80);
-  const fallbackY = Math.min(Math.max(window.innerHeight * 0.56, 230), window.innerHeight - 80);
-  const x = chosen ? Math.min(Math.max(chosen.left + chosen.width * 0.22, 40), window.innerWidth - 40) : fallbackX;
-  const y = chosen ? Math.min(Math.max(chosen.top + chosen.height * 0.28, 80), window.innerHeight - 40) : fallbackY;
+  const chosen = candidates[0] || null;
+  if (chosen?.element) {
+    try {
+      if (!chosen.element.hasAttribute('tabindex')) chosen.element.setAttribute('tabindex', '-1');
+      chosen.element.focus?.({ preventScroll: true });
+    } catch (_) {}
+  }
+
+  const chosenRect = chosen?.rect || null;
+  const rectPoints = [
+    [0.45, 0.48],
+    [0.22, 0.30],
+    [0.35, 0.42],
+    [0.60, 0.50],
+    [0.18, 0.62],
+    [0.72, 0.36]
+  ];
+  const fallbackPoints = [
+    [0.48, 0.55],
+    [0.32, 0.46],
+    [0.62, 0.50],
+    [0.42, 0.36],
+    [0.24, 0.62],
+    [0.72, 0.42]
+  ];
+  const index = Math.abs(Number(pointIndex) || 0) % rectPoints.length;
+  const rectPoint = rectPoints[index];
+  const fallbackPoint = fallbackPoints[index];
+  const fallbackX = Math.min(Math.max(window.innerWidth * fallbackPoint[0], 120), window.innerWidth - 80);
+  const fallbackY = Math.min(Math.max(window.innerHeight * fallbackPoint[1], 150), window.innerHeight - 80);
+  const offset = frameOffset();
+  const rawX = chosenRect ? chosenRect.left + chosenRect.width * rectPoint[0] : fallbackX;
+  const rawY = chosenRect ? chosenRect.top + chosenRect.height * rectPoint[1] : fallbackY;
+  const x = Math.min(Math.max(rawX + offset.x, 40), window.top === window ? window.innerWidth - 40 : 100000);
+  const y = Math.min(Math.max(rawY + offset.y, 80), window.top === window ? window.innerHeight - 40 : 100000);
+  const topCandidates = candidates.slice(0, 4).map((item) => ({
+    kind: item.kind,
+    left: Math.round(item.rect.left),
+    top: Math.round(item.rect.top),
+    width: Math.round(item.rect.width),
+    height: Math.round(item.rect.height),
+    label: item.label
+  }));
 
   return {
     ok: true,
@@ -239,7 +403,30 @@ function prepareExcelKeyboardFocusInPage() {
     x,
     y,
     usedCandidate: !!chosen,
-    candidateCount: candidates.length
+    candidateCount: candidates.length,
+    selectorCandidateCount: selectorCandidates.length,
+    broadCandidateCount: broadCandidates.length,
+    candidateKind: chosen?.kind || '',
+    candidateLabel: chosen?.label || '',
+    candidateRect: chosenRect ? {
+      left: Math.round(chosenRect.left + offset.x),
+      top: Math.round(chosenRect.top + offset.y),
+      width: Math.round(chosenRect.width),
+      height: Math.round(chosenRect.height)
+    } : null,
+    frameOffset: {
+      x: Math.round(offset.x),
+      y: Math.round(offset.y),
+      depth: offset.depth,
+      known: offset.known
+    },
+    frameHref: location.href,
+    pointIndex: index,
+    topCandidates,
+    documentFocused: document.hasFocus(),
+    activeElement: document.activeElement?.tagName || '',
+    activeRole: document.activeElement?.getAttribute?.('role') || '',
+    activeAriaLabel: document.activeElement?.getAttribute?.('aria-label') || ''
   };
 }
 
@@ -249,8 +436,45 @@ function restoreRaBiPopupInPage() {
   return { ok: true };
 }
 
-async function focusExcelWorkbookSurface(target) {
-  const focused = await runFunctionInTab(target.tabId, prepareExcelKeyboardFocusInPage, []);
+async function focusExcelWorkbookSurface(target, options = {}) {
+  await debuggerSendCommand(target, 'Page.bringToFront', {});
+  await delay(250);
+  const topFocused = await runFunctionInTab(target.tabId, prepareExcelKeyboardFocusInPage, [options.pointIndex || 0]);
+  let focused = topFocused;
+
+  if (!topFocused?.ok || !topFocused.usedCandidate) {
+    const frameResult = await runFunctionInTabFrames(target.tabId, prepareExcelKeyboardFocusInPage, [options.pointIndex || 0]);
+    const frameCandidates = (frameResult?.results || [])
+      .map((item) => ({
+        frameId: item.frameId,
+        ...(item.result || {})
+      }))
+      .filter((item) => item.ok && item.usedCandidate)
+      .sort((a, b) => {
+        const areaA = Number(a.candidateRect?.width || 0) * Number(a.candidateRect?.height || 0);
+        const areaB = Number(b.candidateRect?.width || 0) * Number(b.candidateRect?.height || 0);
+        return areaB - areaA;
+      });
+    if (frameCandidates.length) {
+      focused = {
+        ...frameCandidates[0],
+        fromFrame: true,
+        frameCandidateCount: frameCandidates.length,
+        topCandidateCount: topFocused?.candidateCount || 0,
+        topSelectorCandidateCount: topFocused?.selectorCandidateCount || 0,
+        topBroadCandidateCount: topFocused?.broadCandidateCount || 0
+      };
+    } else if (topFocused?.ok) {
+      focused = {
+        ...topFocused,
+        fromFrame: false,
+        frameCandidateCount: 0
+      };
+    } else {
+      focused = topFocused;
+    }
+  }
+
   if (!focused?.ok) {
     return {
       ok: false,
@@ -262,8 +486,33 @@ async function focusExcelWorkbookSurface(target) {
   if (!clicked.ok) {
     return { ok: false, stage: 'excel-focus', reason: `Clique de foco no Excel falhou: ${clicked.reason}` };
   }
-  await delay(450);
+  await delay(650);
   return focused;
+}
+
+function dispatchExcelFindShortcutInPage() {
+  const target = document.activeElement || document.body || document.documentElement || document;
+  const eventInit = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    key: 'f',
+    code: 'KeyF',
+    keyCode: 70,
+    which: 70,
+    ctrlKey: true
+  };
+  ['keydown', 'keypress', 'keyup'].forEach((type) => {
+    target.dispatchEvent(new KeyboardEvent(type, eventInit));
+  });
+  return {
+    ok: true,
+    stage: 'excel-find-shortcut',
+    documentFocused: document.hasFocus(),
+    activeElement: document.activeElement?.tagName || '',
+    activeRole: document.activeElement?.getAttribute?.('role') || '',
+    activeAriaLabel: document.activeElement?.getAttribute?.('aria-label') || ''
+  };
 }
 
 function fillExcelFindDialogInPage(value, submit = false) {
@@ -448,21 +697,105 @@ async function fillExcelFindDialog(target, id, stage, submit = false) {
   };
 }
 
+async function dispatchSyntheticExcelFindShortcut(target) {
+  const direct = await runFunctionInTab(target.tabId, dispatchExcelFindShortcutInPage, []);
+  const frames = await runFunctionInTabFrames(target.tabId, dispatchExcelFindShortcutInPage, []);
+  return {
+    ok: !!direct?.ok || !!frames?.ok,
+    direct,
+    frames,
+    reason: direct?.reason || frames?.reason || ''
+  };
+}
+
+async function tryOpenExcelFindDialog(target, stage, waitMs, attempt) {
+  const variants = [
+    {
+      name: 'debugger-raw-ctrl-f',
+      run: () => dispatchDebuggerCtrlShortcut(target, 'f', 'KeyF', 70)
+    },
+    {
+      name: 'debugger-keydown-ctrl-f',
+      run: () => dispatchDebuggerCtrlShortcutKeyDown(target, 'f', 'KeyF', 70)
+    },
+    {
+      name: 'debugger-modified-key-f',
+      run: () => dispatchDebuggerKey(target, 'f', 'KeyF', 70, { ctrl: true, holdMs: 100 })
+    },
+    {
+      name: 'dom-synthetic-ctrl-f',
+      run: () => dispatchSyntheticExcelFindShortcut(target)
+    }
+  ];
+  let lastReason = '';
+  let lastFocus = null;
+
+  for (let variantIndex = 0; variantIndex < variants.length; variantIndex += 1) {
+    const variant = variants[variantIndex];
+    const pointIndex = ((attempt - 1) * variants.length) + variantIndex;
+    const focus = await focusExcelWorkbookSurface(target, { pointIndex });
+    lastFocus = focus;
+    if (!focus.ok) {
+      lastReason = `${variant.name}: ${focus.reason || 'não consegui focar a área da Planilha'}`;
+      await delay(waitMs);
+      continue;
+    }
+
+    await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+    await delay(120);
+    await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+    await delay(280);
+
+    const sent = await variant.run();
+    if (!sent?.ok) {
+      lastReason = `${variant.name}: ${sent?.reason || 'atalho não foi enviado'}`;
+      await delay(200);
+      continue;
+    }
+
+    await delay(waitMs);
+    const opened = await inspectExcelFindDialog(target, stage);
+    if (opened?.ok) {
+      return {
+        ...opened,
+        openVariant: variant.name,
+        openAttempt: attempt,
+        focus
+      };
+    }
+
+    lastReason = `${variant.name}: ${opened?.reason || 'Find não apareceu'}`;
+    await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+    await delay(250);
+  }
+
+  const focusEvidence = lastFocus
+    ? `Foco: origem=${lastFocus.fromFrame ? `frame:${lastFocus.frameId}` : 'top'}, frameCandidates=${lastFocus.frameCandidateCount || 0}, candidatos=${lastFocus.candidateCount}, seletores=${lastFocus.selectorCandidateCount || 0}, amplos=${lastFocus.broadCandidateCount || 0}, usouGrid=${lastFocus.usedCandidate ? 'sim' : 'não'}, ponto=${lastFocus.pointIndex}, tipo=${lastFocus.candidateKind || 'nenhum'}, rect=${lastFocus.candidateRect ? `${lastFocus.candidateRect.left},${lastFocus.candidateRect.top},${lastFocus.candidateRect.width}x${lastFocus.candidateRect.height}` : 'nenhum'}, offset=${lastFocus.frameOffset ? `${lastFocus.frameOffset.x},${lastFocus.frameOffset.y},d${lastFocus.frameOffset.depth},${lastFocus.frameOffset.known ? 'ok' : 'incerto'}` : 'n/a'}, docFocus=${lastFocus.documentFocused ? 'sim' : 'não'}, ativo=${lastFocus.activeElement || 'vazio'}${lastFocus.activeRole ? `/${lastFocus.activeRole}` : ''}${lastFocus.activeAriaLabel ? `/${lastFocus.activeAriaLabel}` : ''}, top=${(lastFocus.topCandidates || []).map((item) => `${item.kind}:${item.left},${item.top},${item.width}x${item.height}:${item.label}`).join(' || ') || 'nenhum'}.`
+    : 'Foco: sem evidência.';
+  return {
+    ok: false,
+    stage,
+    reason: `Tentativa ${attempt}: não consegui abrir/confirmar o Find do Excel após variantes de teclado. ${lastReason} ${focusEvidence}`.trim()
+  };
+}
+
 async function findExcelIdWithSearch(target, id, stage = 'excel-find-anchor') {
   const wanted = normalizeExcelIdValue(id);
-  const focus = await focusExcelWorkbookSurface(target);
-  if (!focus.ok) return focus;
-
   let lastCopiedText = '';
   let lastReason = '';
 
   for (let attempt = 1; attempt <= EXCEL_FIND_ATTEMPT_WAITS_MS.length; attempt += 1) {
     const waitMs = EXCEL_FIND_ATTEMPT_WAITS_MS[attempt - 1];
-    let sent = await dispatchDebuggerCtrlShortcut(target, 'f', 'KeyF', 70);
-    if (!sent.ok) return { ok: false, stage, reason: `Ctrl+F na Planilha falhou: ${sent.reason}` };
-    await delay(waitMs);
 
-    const opened = await inspectExcelFindDialog(target, stage);
+    if (attempt > 1) {
+      const alreadySelected = await verifySelectedExcelId(target, id, stage);
+      if (alreadySelected.ok) {
+        return { ...alreadySelected, attempts: attempt - 1, reusedExistingSelection: true };
+      }
+      lastCopiedText = alreadySelected.copiedText || lastCopiedText;
+    }
+
+    const opened = await tryOpenExcelFindDialog(target, stage, waitMs, attempt);
     if (!opened?.ok) {
       lastReason = `Tentativa ${attempt}: busca do Excel não ficou pronta após ${waitMs}ms. ${opened?.reason || ''}`.trim();
       await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
@@ -485,22 +818,22 @@ async function findExcelIdWithSearch(target, id, stage = 'excel-find-anchor') {
     }
 
     await delay(waitMs);
-    sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+    const sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
     if (!sent.ok) return { ok: false, stage, reason: `Escape para fechar a busca falhou: ${sent.reason}` };
-    await delay(300);
+    await delay(450);
 
-    const selected = await copySelectedExcelText(target, `${stage}-verify`, { attempts: 2, baseWaitMs: 450 });
+    const selected = await verifySelectedExcelId(target, id, stage);
     if (!selected.ok) {
-      lastReason = `Tentativa ${attempt}: ${selected.reason || 'Não consegui copiar a célula selecionada para confirmar o ID.'}`;
+      lastCopiedText = selected.copiedText || lastCopiedText;
+      lastReason = `Tentativa ${attempt}: ${selected.reason || 'Não consegui confirmar a célula selecionada.'}`;
       continue;
     }
 
-    lastCopiedText = selected.text || '';
-    const selectedId = normalizeExcelIdValue(selected.text);
-    if (selectedId === wanted) {
-      return { ok: true, stage, id: wanted, copiedText: selected.text, attempts: attempt };
+    lastCopiedText = selected.copiedText || '';
+    if (normalizeExcelIdValue(selected.copiedText) === wanted) {
+      return { ...selected, attempts: attempt };
     }
-    lastReason = `Tentativa ${attempt}: a célula selecionada copiou "${String(selected.text || '').trim()}".`;
+    lastReason = `Tentativa ${attempt}: a célula selecionada copiou "${String(selected.copiedText || '').trim()}".`;
   }
 
   return {

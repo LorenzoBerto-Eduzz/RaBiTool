@@ -60,6 +60,8 @@ The popup is compact and fixed-position:
 
 The tracked-tab buttons are outline-only: green/check means ready, blue/spinner means checking/loading, and red/X means blocked or login/permisson needed. The `RA > BI` button calls the RA export/download/parser and guarded Excel Web keyboard paste workflow. The temporary `Test Paste` button/action and local test XLSX were removed from dev and release builds. The default placement is top-right; dragging saves the position, while browser resize/zoom should only keep the popup visible and should not save a new position.
 
+Every visible notice/log row is clickable and has a deterministic debug code generated from severity, stage, message text, and available diagnostic seed. The code is not shown in the popup UI. Final workflow notices are normalized in `background/ra_bi_workflow.js` with `stage`, `at`, compact `diagnostic` details, and `code`; clicking a notice copies the readable message plus stage/time/details/code, which is the support path for colleague testing reports.
+
 ## Workspace Tabs
 
 RaBiTool owns a reserved pair of HugMe/Planilha tabs. On activation and on `RA > BI`, it prepares the assigned tabs. It reuses only the tab IDs and Chrome group ID recorded by RaBiTool for the current extension load marker; it does not scan arbitrary existing tabs or trust an old group merely because it is named `RaBiTool`.
@@ -74,7 +76,7 @@ The options page includes `Execução Automática`: an off-by-default `Auto Run 
 
 Auto-run does not require the manual popup toggle to already be on. When the alarm fires, it enables RaBiTool for the session so the popup/status can appear, prepares reserved tabs, and calls the same guarded workflow as the manual `RA > BI` button. The final Excel Web paste still needs focused Planilha tab control because it uses UI keyboard/clipboard automation.
 
-After an auto-run RA > BI execution returns, the autorun path disables RaBiTool through the shared hard-cleanup helper. This closes the tracked HugMe/Planilha tabs and clears workspace tracking. Manual RA > BI executions intentionally stay open after completion.
+After an auto-run RA > BI execution completes successfully, the autorun path disables RaBiTool through the shared hard-cleanup helper. This closes the tracked HugMe/Planilha tabs and clears workspace tracking. If the auto-run blocks, errors, hits login, or is skipped, the popup and tracked tabs stay open for user review/recovery. Manual RA > BI executions intentionally stay open after completion.
 
 ## Permissions
 
@@ -107,7 +109,7 @@ This project intentionally uses browser UI automation instead of API integration
 - prefer explicit owner-confirmed button labels/selectors;
 - use clipboard/import only where Chrome and Excel Web allow it reliably.
 - for the current Excel Web write path, explicitly focus the Excel tab before keyboard/debugger actions and clearly show that step in popup status text.
-- for Excel Find, treat `Ctrl+F` as a requested action rather than proof of readiness: confirm the Find input appears, confirm the searched ID was written into it, and confirm the selected cell copies back as that same ID before pasting. The current guard retries this up to six times with increasing waits for slower machines.
+- for Excel Find, treat `Ctrl+F` as a requested action rather than proof of readiness: bring the page forward, refocus the workbook surface, detect both explicit Excel grid selectors and broad visible workbook-like surfaces in the top document and accessible frames, vary click points inside the target surface, try multiple Ctrl+F delivery variants if needed, confirm the Find input appears, confirm the searched ID was written into it, and confirm the selected cell copies back as that same ID before pasting. The current guard retries Find opening and selected-cell confirmation with increasing waits for slower machines, logs focus/candidate/frame evidence if Find cannot open, and should not reopen Find when the selected anchor is already proven correct.
 
 ## Local Release Exports
 

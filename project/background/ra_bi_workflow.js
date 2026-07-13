@@ -8,6 +8,88 @@ const RABITOOL_ACTIONS = {
 
 let raBiWorkflowLock = null;
 
+function raBiDiagnosticHash(value) {
+  const text = String(value || '');
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).toUpperCase().padStart(6, '0').slice(-6);
+}
+
+function raBiDiagnosticPart(value, fallback = 'LOG') {
+  const text = String(value || fallback)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .toUpperCase();
+  return (text || fallback).slice(0, 32);
+}
+
+function raBiDiagnosticCode({ level = 'info', stage = 'workflow', text = '', seed = '' } = {}) {
+  const levelPart = raBiDiagnosticPart(level, 'INFO').slice(0, 4);
+  const stagePart = raBiDiagnosticPart(stage, 'WORKFLOW');
+  return `RBT-${levelPart}-${stagePart}-${raBiDiagnosticHash(`${levelPart}|${stagePart}|${text}|${seed}`)}`;
+}
+
+function compactDiagnosticValue(value, depth = 0) {
+  if (value == null || value === '') return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (depth >= 2) return Array.isArray(value) ? `[${value.length} itens]` : '[objeto]';
+  if (Array.isArray(value)) {
+    return value.slice(0, 5).map((item) => compactDiagnosticValue(item, depth + 1)).filter(Boolean).join(', ');
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value)
+      .slice(0, 12)
+      .map(([key, item]) => {
+        const compact = compactDiagnosticValue(item, depth + 1);
+        return compact ? `${key}=${compact}` : '';
+      })
+      .filter(Boolean)
+      .join('; ');
+  }
+  return '';
+}
+
+function workflowResultDiagnostic(result = {}) {
+  const diagnostic = {};
+  const keys = [
+    'stage',
+    'cancelled',
+    'skipped',
+    'title',
+    'filename',
+    'downloadId',
+    'reportRowCount',
+    'reportFirstId',
+    'reportLastId',
+    'reportFirstDate',
+    'reportLastDate',
+    'targetAnchorId'
+  ];
+  keys.forEach((key) => {
+    if (result[key] != null && result[key] !== '') diagnostic[key] = result[key];
+  });
+  if (result.excelResult) {
+    diagnostic.excel = {
+      stage: result.excelResult.stage || '',
+      targetAnchorId: result.excelResult.targetAnchorId || '',
+      reportRowCount: result.excelResult.reportRowCount || '',
+      reportColumnCount: result.excelResult.reportColumnCount || '',
+      usedKeyboardFallback: result.excelResult.usedKeyboardFallback
+    };
+  }
+  if (result.diagnostic || result.diagnostics || result.evidence) {
+    diagnostic.details = result.diagnostic || result.diagnostics || result.evidence;
+  }
+  return diagnostic;
+}
+
 function isRaBiWorkflowRunning() {
   return !!raBiWorkflowLock;
 }
@@ -40,10 +122,21 @@ function normalizeWorkflowNotice(notice) {
   if (!notice) return null;
   const text = String(notice.text || notice.reason || notice.message || '').trim();
   if (!text) return null;
+  const level = notice.level || 'info';
+  const stage = notice.stage || '';
+  const diagnostic = notice.diagnostic || null;
+  const code = notice.code || raBiDiagnosticCode({
+    level,
+    stage,
+    text,
+    seed: compactDiagnosticValue(diagnostic)
+  });
   return {
+    code,
+    diagnostic,
     level: notice.level || 'info',
     text,
-    stage: notice.stage || '',
+    stage,
     at: notice.at || new Date().toISOString()
   };
 }
@@ -82,17 +175,32 @@ function clearFinishedRaBiWorkflowStatus() {
 
 function workflowNoticeFromResult(result) {
   if (!result) return { level: 'error', text: 'Workflow terminou sem resposta.' };
+  const text = result.ok
+    ? (result.message || result.reason || `Etapa ${result.stage || 'workflow'} concluida.`)
+    : (result.reason || `Etapa ${result.stage || 'workflow'} bloqueada.`);
+  const level = result.ok ? 'info' : ((result.cancelled || result.skipped) ? 'warn' : 'error');
+  const diagnostic = workflowResultDiagnostic(result);
+  const code = result.code || raBiDiagnosticCode({
+    level,
+    stage: result.stage || '',
+    text,
+    seed: compactDiagnosticValue(diagnostic)
+  });
   if (result.ok) {
     return {
-      level: 'info',
+      code,
+      diagnostic,
+      level,
       stage: result.stage || '',
-      text: result.message || result.reason || `Etapa ${result.stage || 'workflow'} concluida.`
+      text
     };
   }
   return {
-    level: 'error',
+    code,
+    diagnostic,
+    level,
     stage: result.stage || '',
-    text: result.reason || `Etapa ${result.stage || 'workflow'} bloqueada.`
+    text
   };
 }
 

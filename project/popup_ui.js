@@ -248,6 +248,7 @@
     .csh-status-item {
       align-items: flex-start;
       color: #6b7280;
+      cursor: pointer;
       display: flex;
       font: 500 11px/1.35 'SF Mono','Consolas','Menlo',monospace;
       gap: 6px;
@@ -260,6 +261,10 @@
       flex: 0 0 auto;
       font-size: 11px;
       line-height: 1.35;
+    }
+    .csh-status-text {
+      min-width: 0;
+      user-select: text;
     }
     @keyframes csh-spin {
       to { transform: rotate(360deg); }

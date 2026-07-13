@@ -215,6 +215,77 @@
     return 'i';
   }
 
+  function noticeHash(value) {
+    let hash = 2166136261;
+    const text = String(value || '');
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36).toUpperCase().padStart(6, '0').slice(-6);
+  }
+
+  function noticeCodePart(value, fallback = 'LOG') {
+    const text = String(value || fallback)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-+|-+$/g, '')
+      .toUpperCase();
+    return (text || fallback).slice(0, 28);
+  }
+
+  function noticeDebugCode(item, scope = 'popup') {
+    if (item?.code) return String(item.code).trim();
+    const level = noticeCodePart(item?.level || 'info', 'INFO').slice(0, 4);
+    const stage = noticeCodePart(item?.stage || scope || 'log', 'LOG');
+    const text = String(item?.text || '').trim();
+    return `RBT-${level}-${stage}-${noticeHash(`${level}|${stage}|${text}`)}`;
+  }
+
+  function formatCopyDiagnostic(diagnostic) {
+    if (!diagnostic) return '';
+    if (typeof diagnostic === 'string') return diagnostic.trim();
+    try {
+      return JSON.stringify(diagnostic);
+    } catch (_) {
+      return String(diagnostic || '').trim();
+    }
+  }
+
+  async function copyLogText(text, code, item = {}) {
+    const parts = [String(text || '').trim()];
+    if (item.stage) parts.push(`Etapa: ${item.stage}`);
+    if (item.at) parts.push(`Hor\u00e1rio: ${item.at}`);
+    const diagnostic = formatCopyDiagnostic(item.diagnostic);
+    if (diagnostic) parts.push(`Detalhes: ${diagnostic}`);
+    parts.push(`C\u00f3digo: ${code}`);
+    const value = parts.filter(Boolean).join(' | ');
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return true;
+      }
+    } catch (_) {}
+
+    const area = document.createElement('textarea');
+    area.value = value;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.left = '-9999px';
+    area.style.top = '0';
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch (_) {
+      ok = false;
+    }
+    area.remove();
+    return ok;
+  }
+
   function noticeSignature(notices = []) {
     return JSON.stringify(uniqueNotices(notices));
   }
@@ -226,10 +297,12 @@
       const text = String(item?.text || '').trim();
       if (!text) continue;
       const level = item.level || 'info';
-      const key = `${level}:${text}`;
+      const stage = item.stage || '';
+      const code = noticeDebugCode({ ...item, level, text, stage }, 'notice');
+      const key = `${level}:${stage}:${code}:${text}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      unique.push({ level, text });
+      unique.push({ ...item, level, text, stage, code });
     }
     return unique;
   }
@@ -246,11 +319,22 @@
         const row = document.createElement('div');
         row.className = 'csh-status-item';
         row.dataset.level = item.level || 'info';
+        row.dataset.code = item.code || '';
+        row.title = 'Clique para copiar o diagnóstico';
         const icon = document.createElement('span');
         icon.className = 'csh-status-icon';
         icon.textContent = noticeIcon(item.level);
         const text = document.createElement('span');
+        text.className = 'csh-status-text';
         text.textContent = String(item.text || '').trim();
+        row.addEventListener('click', async () => {
+          const copied = await copyLogText(item.text, item.code, item);
+          if (!copied) return;
+          row.dataset.copied = 'true';
+          window.setTimeout(() => {
+            if (row.isConnected) delete row.dataset.copied;
+          }, 900);
+        });
         row.append(icon, text);
         status.appendChild(row);
       });
@@ -287,7 +371,11 @@
   function workspaceNotices(status) {
     return [status?.ra, status?.bi]
       .filter((item) => item && item.state === 'error')
-      .map((item) => ({ level: 'warn', text: `${item.label}: ${item.reason}` }));
+      .map((item) => ({
+        level: 'warn',
+        stage: `workspace-${String(item.kind || item.label || 'tab').toLowerCase()}`,
+        text: `${item.label}: ${item.reason}`
+      }));
   }
 
   function workflowNotices(status) {

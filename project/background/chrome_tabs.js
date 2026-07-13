@@ -159,6 +159,34 @@ async function dispatchDebuggerCtrlShortcut(target, key, code, windowsVirtualKey
   return debuggerSendCommand(target, 'Input.dispatchKeyEvent', { ...control, type: 'keyUp' });
 }
 
+async function dispatchDebuggerCtrlShortcutKeyDown(target, key, code, windowsVirtualKeyCode) {
+  const control = { key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, nativeVirtualKeyCode: 17, modifiers: 2 };
+  let result = await debuggerSendCommand(target, 'Input.dispatchKeyEvent', { ...control, type: 'rawKeyDown' });
+  if (!result.ok) return result;
+  await delay(70);
+  result = await debuggerSendCommand(target, 'Input.dispatchKeyEvent', {
+    key,
+    code,
+    windowsVirtualKeyCode,
+    nativeVirtualKeyCode: windowsVirtualKeyCode,
+    modifiers: 2,
+    type: 'keyDown'
+  });
+  if (!result.ok) return result;
+  await delay(70);
+  result = await debuggerSendCommand(target, 'Input.dispatchKeyEvent', {
+    key,
+    code,
+    windowsVirtualKeyCode,
+    nativeVirtualKeyCode: windowsVirtualKeyCode,
+    modifiers: 2,
+    type: 'keyUp'
+  });
+  if (!result.ok) return result;
+  await delay(70);
+  return debuggerSendCommand(target, 'Input.dispatchKeyEvent', { ...control, type: 'keyUp' });
+}
+
 async function dispatchDebuggerCtrlShiftKey(target, key, code, windowsVirtualKeyCode) {
   const control = { key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, nativeVirtualKeyCode: 17, modifiers: 2 };
   const shift = { key: 'Shift', code: 'ShiftLeft', windowsVirtualKeyCode: 16, nativeVirtualKeyCode: 16, modifiers: 10 };

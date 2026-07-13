@@ -168,7 +168,7 @@ async function runScheduledRaBiWorkflow(meta = {}) {
     lastReason: result?.message || result?.reason || '',
     lastStage: result?.stage || ''
   });
-  await setRaBiToolEnabled(false, null);
+  if (result?.ok) await setRaBiToolEnabled(false, null);
   return result;
 }
 

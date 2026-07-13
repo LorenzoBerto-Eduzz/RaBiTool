@@ -78,7 +78,7 @@ Keep the workflow staged and modular:
 3. XLSX parser: detects the real header row, validates required headers, maps by header names, normalizes values, and rejects malformed reports.
 4. Reconciliation engine: compares normalized report rows to the relevant mother-sheet window. It should use `Id HugMe` for identity and `Data Reclamação` for time span/sorting.
 5. Excel Web writer: writes the prepared result into the mother sheet through the approved UI-based method.
-6. Safety/reporting layer: presents row counts, date spans, duplicate IDs, expected changes, and exact failure stages in the popup.
+6. Safety/reporting layer: presents row counts, date spans, duplicate IDs, expected changes, and exact failure stages in the popup. Final blocks/results should also carry a copyable diagnostic payload with stage, timestamp, compact details, and a deterministic `RBT-...` code.
 
 ## Tab Preconditions
 
@@ -107,7 +107,7 @@ For the current implementation phase, RaBiTool owns reserved RA and mother-sheet
 - The background uses Chrome alarms to schedule the next selected local day/time as a one-shot alarm, then reschedules after each alarm fires or settings change.
 - If Chrome/laptop is closed, asleep, or wakes too late for the configured time, the run is skipped rather than executed later as a catch-up.
 - When the scheduled run fires on time, it enables/shows RaBiTool status, prepares the reserved tabs, waits for readiness, and runs the same guarded `RA > BI` workflow as the manual button.
-- When a scheduled RA > BI run returns, RaBiTool automatically toggles itself off through the shared hard-shutdown path, closing the tracked HugMe/Planilha tabs and clearing workspace tracking. Manual runs do not auto-close after completion.
+- When a scheduled RA > BI run completes successfully, RaBiTool automatically toggles itself off through the shared hard-shutdown path, closing the tracked HugMe/Planilha tabs and clearing workspace tracking. If the scheduled run blocks, errors, hits login, or is skipped, RaBiTool stays open with the popup/status and tracked tabs available for user review/recovery. Manual runs do not auto-close after completion.
 - Only one RA > BI workflow may run at a time. If the user clicks `RA > BI` while another run is active, or an auto-run alarm fires during a manual run, the second request is skipped and the first run continues.
 - The Excel Web paste phase still focuses the Planilha tab because current UI-based find/copy/paste cannot safely run in the background.
 
@@ -203,10 +203,10 @@ The current sequence is:
 
 1. Activate/focus the tracked Excel Web tab.
 2. Confirm the active worksheet tab is exactly the configured worksheet, currently `Relatorio de Tickets`. The primary signal is Excel Web's sheet tab bar with `role="tab"` and `aria-selected="true"`; if the active worksheet cannot be proven, block before touching data.
-3. Use `Ctrl+F` in Excel Web and confirm the Find dialog/input is visible and writable.
+3. Bring the page forward, refocus the workbook surface, use `Ctrl+F` in Excel Web, and confirm the Find dialog/input is visible and writable. Workbook focus should first prefer explicit grid/canvas/sheet selectors, then fall back to broad visible workbook-like regions and varied click points, checking both the top document and accessible frames. If Excel Web does not expose the Find dialog, retry with multiple keyboard delivery variants before failing closed.
 4. Paste/fill the oldest incoming report `Id HugMe`, confirm the Find field contains that ID, press Enter twice, and wait for Excel selection to settle.
 5. Close Find, copy the selected cell, and verify the selected value equals the expected oldest report ID.
-6. Retry the Find/anchor proof up to six increasingly patient attempts (`500ms` through `3000ms`) on slower machines.
+6. Retry the Find/anchor proof up to six increasingly patient attempts (`500ms` through `3000ms`) on slower machines. Each attempt may try multiple Ctrl+F delivery variants. Before repeating Find, first re-check whether the selected cell is already the expected anchor ID so a slow but successful search does not cause an unnecessary second Find cycle.
 7. Copy the prepared 9-column TSV and send one `Ctrl+V` on that anchor cell, without pressing Enter afterward, so Excel does not move the selection down after paste.
 
 Known limitation: this UI-based Excel phase needs focus because Excel Web's find, selection, copy, and paste behavior is tied to the active workbook surface and browser clipboard focus rules. A fully no-focus write would require a different integration path such as Microsoft Graph or another API, which the owner has explicitly not chosen for this project.
@@ -252,6 +252,7 @@ Before heavy development, align in this order:
 ## Popup/UI Alignment
 
 - Current visible popup baseline is a compact top-right tool: drag handle, settings gear, close icon, top separator, outline `HugMe`/`Planilha` tracked-tab status buttons, `RA > BI` button, loading/current-process line, and stacked warning/result notices.
+- Notice/log rows should stay visually clean, show only the normal log text, and be clickable. The copied text must include the log text plus `Etapa`, `Horário`, optional `Detalhes`, and end with `Código: ...` so a tester can send the exact failure back for diagnosis.
 - Visual direction: white popup, gray icons, gray separator line, icons hover green/light green. Tracked-tab buttons are outline-only and use green/check when ready, blue/spinner while checking, and red/X when blocked.
 - Popup should be toggleable by the extension action/shortcut.
 - The `RA > BI` button should work from the normal content-script popup and from the options-page popup preview.
