@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "RaBiTool",
   "version": "0.1.0",
-  "description": "Browser automation helper for moving Reclame Aqui XLSX exports into an Excel BI sheet.",
+  "description": "Extensão para trazer relatório do HugMe para a planilha mãe do BI.",
   "permissions": ["storage", "tabs", "tabGroups", "scripting", "commands", "downloads", "alarms", "offscreen", "clipboardWrite", "clipboardRead", "debugger"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
@@ -17,7 +17,7 @@
   "action": { "default_title": "RaBiTool" },
   "commands": {
     "_execute_action": {
-      "description": "Toggle RaBiTool"
+      "description": "Ativar/desativar RaBiTool"
     }
   }
 }

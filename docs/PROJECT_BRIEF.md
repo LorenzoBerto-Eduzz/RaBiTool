@@ -41,6 +41,8 @@ The project should be developed as a reliable business-data workflow, not as a l
 - Downloads, offscreen clipboard, tabs, tab groups, scripting, debugger, and commands are available for the prototype.
 - Optional scheduled auto-run uses Chrome alarms, with an off-by-default config section for local time and active weekdays.
 - Activation and `RA > BI` use RaBiTool-owned reserved HugMe/Planilha tabs. Current-load group/tab IDs are reused; arbitrary pre-existing tabs or stale groups named `RaBiTool` are ignored.
+- Disabling/toggling off RaBiTool is now a hard session shutdown: it cancels any active RA > BI workflow, closes the tracked HugMe and Planilha tabs, clears workspace tracking, and sets the extension disabled.
+- User-facing extension text should be PT-BR with correct accents in popup, options page, manifest description, workflow statuses, and blocking/error messages.
 - Broad host permissions remain during discovery.
 - Durable docs capture the current two-spreadsheet model and alignment-first development plan.
 - Popup visual baseline is a clean white shell with gray controls and green hover.
@@ -62,6 +64,8 @@ The project should be developed as a reliable business-data workflow, not as a l
 - Fail closed when business data validation is uncertain.
 - Prefer header-name mapping and explicit validation over fixed column positions.
 - Avoid touching unrelated mother-sheet rows outside the affected time span.
+- Keep one contiguous Excel paste as the write action whenever possible so Excel Web undo remains simple.
+- Treat Excel Web UI automation as focused-tab automation. Guard Excel Find by proving the Find dialog, searched ID, and selected anchor cell before pasting.
 - After validation guards pass, optimize for quick/automatic execution.
 - Next planned project direction is GitHub remote setup, a future `remoterelease` command for GitHub Releases, and a config-page version/download section.
 

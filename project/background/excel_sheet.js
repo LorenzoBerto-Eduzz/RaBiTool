@@ -96,7 +96,7 @@ async function verifyExcelWorksheetReady(excelTabId, settings) {
     return {
       ok: false,
       stage: 'excel-worksheet',
-      reason: inspected?.reason || `Nao consegui verificar se a aba ativa do Excel e "${expectedName}".`
+      reason: inspected?.reason || `Não consegui verificar se a aba ativa do Excel é "${expectedName}".`
     };
   }
 
@@ -120,7 +120,7 @@ async function verifyExcelWorksheetReady(excelTabId, settings) {
   return {
     ok: false,
     stage: 'excel-worksheet',
-    reason: `A aba ativa do Excel Web nao foi confirmada como "${expectedName}". Aba ativa detectada: "${activeName}".${suffix} Nao vou colar fora da aba correta.`
+    reason: `A aba ativa do Excel Web não foi confirmada como "${expectedName}". Aba ativa detectada: "${activeName}".${suffix} Não vou colar fora da aba correta.`
   };
 }
 
@@ -149,27 +149,48 @@ function normalizeExcelIdValue(value) {
   return text.replace(/\s+/g, '');
 }
 
-async function copySelectedExcelText(target, stage) {
-  const sentinel = `__RABITOOL_CLIPBOARD_SENTINEL_${Date.now()}_${Math.random().toString(16).slice(2)}__`;
-  const seeded = await copyText(sentinel);
-  if (!seeded.ok) return { ...seeded, stage };
-  await delay(120);
+const EXCEL_FIND_ATTEMPT_WAITS_MS = [500, 1000, 1500, 2000, 2500, 3000];
 
-  const sent = await dispatchDebuggerCtrlShortcut(target, 'c', 'KeyC', 67);
-  if (!sent.ok) {
-    return { ok: false, stage, reason: `Ctrl+C na Planilha falhou: ${sent.reason}` };
+async function copySelectedExcelText(target, stage, options = {}) {
+  const attempts = Math.max(1, Number(options.attempts || 1));
+  const baseWaitMs = Math.max(0, Number(options.baseWaitMs || 350));
+  let lastReason = '';
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const sentinel = `__RABITOOL_CLIPBOARD_SENTINEL_${Date.now()}_${Math.random().toString(16).slice(2)}__`;
+    const seeded = await copyText(sentinel);
+    if (!seeded.ok) return { ...seeded, stage };
+    await delay(120);
+
+    const sent = await dispatchDebuggerCtrlShortcut(target, 'c', 'KeyC', 67);
+    if (!sent.ok) {
+      lastReason = `Ctrl+C na Planilha falhou: ${sent.reason}`;
+      await delay(150);
+      continue;
+    }
+
+    await delay(baseWaitMs + ((attempt - 1) * 250));
+    const selected = await readText({ returnTabId: target.tabId });
+    if (!selected.ok) {
+      lastReason = selected.reason || 'Leitura do clipboard falhou após Ctrl+C.';
+      await delay(150);
+      continue;
+    }
+
+    if (String(selected.text || '') === sentinel) {
+      lastReason = 'Excel não copiou nenhum valor após Ctrl+C. Provavelmente a célula alvo ainda não estava selecionada.';
+      await delay(150);
+      continue;
+    }
+
+    return { ok: true, stage, text: selected.text || '', copyAttempts: attempt };
   }
-  await delay(350);
-  const selected = await readText({ returnTabId: target.tabId });
-  if (!selected.ok) return { ...selected, stage };
-  if (String(selected.text || '') === sentinel) {
-    return {
-      ok: false,
-      stage,
-      reason: 'Excel nao copiou nenhum valor apos Ctrl+C. Provavelmente a celula alvo ainda nao estava selecionada.'
-    };
-  }
-  return { ok: true, stage, text: selected.text || '' };
+
+  return {
+    ok: false,
+    stage,
+    reason: `${lastReason || 'Não consegui copiar a célula selecionada.'} Tentativas de cópia: ${attempts}.`
+  };
 }
 
 function prepareExcelKeyboardFocusInPage() {
@@ -234,7 +255,7 @@ async function focusExcelWorkbookSurface(target) {
     return {
       ok: false,
       stage: 'excel-focus',
-      reason: focused?.reason || 'Nao consegui preparar foco na area da Planilha.'
+      reason: focused?.reason || 'Não consegui preparar foco na área da Planilha.'
     };
   }
   const clicked = await dispatchDebuggerMouseClick(target, focused.x, focused.y);
@@ -272,7 +293,7 @@ function fillExcelFindDialogInPage(value, submit = false) {
     return {
       ok: false,
       stage: 'excel-find-dialog',
-      reason: 'A busca do Excel abriu, mas o campo de texto nao ficou acessivel.'
+      reason: 'A busca do Excel abriu, mas o campo de texto não ficou acessível.'
     };
   }
 
@@ -328,6 +349,75 @@ function fillExcelFindDialogInPage(value, submit = false) {
   })();
 }
 
+function inspectExcelFindDialogInPage() {
+  function visible(element) {
+    if (!element) return false;
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+  }
+
+  const input = [
+    document.querySelector('#findTextId'),
+    document.querySelector('input[data-unique-id="findTextId-input"]'),
+    document.querySelector('input[aria-label="Find"]'),
+    document.querySelector('input[placeholder="Insert Text"]'),
+    ...Array.from(document.querySelectorAll('input[type="text"]')).filter((item) => {
+      const label = item.getAttribute('aria-label') || item.placeholder || item.id || '';
+      return /find|localizar|buscar/i.test(label);
+    })
+  ].find(visible);
+
+  if (!input) {
+    return {
+      ok: false,
+      stage: 'excel-find-dialog',
+      reason: 'O diálogo de busca do Excel ainda não ficou visível/acessível.'
+    };
+  }
+
+  return {
+    ok: !input.disabled && !input.readOnly,
+    stage: 'excel-find-dialog',
+    value: input.value || '',
+    activeElementId: document.activeElement?.id || '',
+    activeElementLabel: document.activeElement?.getAttribute?.('aria-label') || '',
+    disabled: !!input.disabled,
+    readOnly: !!input.readOnly,
+    reason: input.disabled || input.readOnly
+      ? 'O campo de busca do Excel apareceu, mas ainda não está pronto para receber texto.'
+      : ''
+  };
+}
+
+async function inspectExcelFindDialog(target, stage) {
+  const direct = await runFunctionInTab(target.tabId, inspectExcelFindDialogInPage, []);
+  if (direct?.ok) return direct;
+
+  const frameResult = await runFunctionInTabFrames(target.tabId, inspectExcelFindDialogInPage, []);
+  if (!frameResult?.ok) {
+    return {
+      ok: false,
+      stage,
+      reason: frameResult?.reason || direct?.reason || 'Não consegui verificar o diálogo de busca do Excel.'
+    };
+  }
+
+  const results = (frameResult.results || []).map((item) => ({
+    frameId: item.frameId,
+    ...(item.result || {})
+  }));
+  const ready = results.find((item) => item.ok);
+  if (ready) return ready;
+
+  const firstReason = results.find((item) => item.reason)?.reason || direct?.reason || '';
+  return {
+    ok: false,
+    stage,
+    reason: firstReason || 'O diálogo de busca do Excel não ficou acessível nos frames da página.'
+  };
+}
+
 async function fillExcelFindDialog(target, id, stage, submit = false) {
   const direct = await runFunctionInTab(target.tabId, fillExcelFindDialogInPage, [String(id), submit]);
   if (direct?.ok && normalizeExcelIdValue(direct.value) === normalizeExcelIdValue(id)) {
@@ -339,7 +429,7 @@ async function fillExcelFindDialog(target, id, stage, submit = false) {
     return {
       ok: false,
       stage,
-      reason: frameResult?.reason || direct?.reason || 'Nao consegui encontrar o campo de busca nos frames do Excel.'
+      reason: frameResult?.reason || direct?.reason || 'Não consegui encontrar o campo de busca nos frames do Excel.'
     };
   }
 
@@ -354,7 +444,7 @@ async function fillExcelFindDialog(target, id, stage, submit = false) {
   return {
     ok: false,
     stage,
-    reason: `A busca do Excel abriu, mas o campo de busca nao ficou preenchivel nos frames acessiveis. ${firstError}`.trim()
+    reason: `A busca do Excel abriu, mas o campo de busca não ficou preenchível nos frames acessíveis. ${firstError}`.trim()
   };
 }
 
@@ -366,34 +456,42 @@ async function findExcelIdWithSearch(target, id, stage = 'excel-find-anchor') {
   let lastCopiedText = '';
   let lastReason = '';
 
-  const attemptWaits = [500, 1000];
-  for (let attempt = 1; attempt <= attemptWaits.length; attempt += 1) {
+  for (let attempt = 1; attempt <= EXCEL_FIND_ATTEMPT_WAITS_MS.length; attempt += 1) {
+    const waitMs = EXCEL_FIND_ATTEMPT_WAITS_MS[attempt - 1];
     let sent = await dispatchDebuggerCtrlShortcut(target, 'f', 'KeyF', 70);
     if (!sent.ok) return { ok: false, stage, reason: `Ctrl+F na Planilha falhou: ${sent.reason}` };
-    await delay(250);
+    await delay(waitMs);
+
+    const opened = await inspectExcelFindDialog(target, stage);
+    if (!opened?.ok) {
+      lastReason = `Tentativa ${attempt}: busca do Excel não ficou pronta após ${waitMs}ms. ${opened?.reason || ''}`.trim();
+      await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+      await delay(150);
+      continue;
+    }
 
     const filled = await fillExcelFindDialog(target, id, stage, 2);
     if (!filled?.ok) {
-      lastReason = filled?.reason || 'Nao consegui focar/preencher o campo de busca do Excel.';
+      lastReason = `Tentativa ${attempt}: ${filled?.reason || 'Não consegui focar/preencher o campo de busca do Excel.'}`;
       await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
-      await delay(120);
+      await delay(150);
       continue;
     }
     if (normalizeExcelIdValue(filled.value) !== wanted) {
-      lastReason = `Campo de busca do Excel nao confirmou o ID esperado. Esperado ${id}, valor atual "${filled.value || ''}".`;
+      lastReason = `Tentativa ${attempt}: campo de busca do Excel não confirmou o ID esperado. Esperado ${id}, valor atual "${filled.value || ''}".`;
       await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
-      await delay(120);
+      await delay(150);
       continue;
     }
 
-    await delay(attemptWaits[attempt - 1]);
+    await delay(waitMs);
     sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
     if (!sent.ok) return { ok: false, stage, reason: `Escape para fechar a busca falhou: ${sent.reason}` };
-    await delay(150);
+    await delay(300);
 
-    const selected = await copySelectedExcelText(target, `${stage}-verify`);
+    const selected = await copySelectedExcelText(target, `${stage}-verify`, { attempts: 2, baseWaitMs: 450 });
     if (!selected.ok) {
-      lastReason = selected.reason || 'Nao consegui copiar a celula selecionada para confirmar o ID.';
+      lastReason = `Tentativa ${attempt}: ${selected.reason || 'Não consegui copiar a célula selecionada para confirmar o ID.'}`;
       continue;
     }
 
@@ -402,13 +500,13 @@ async function findExcelIdWithSearch(target, id, stage = 'excel-find-anchor') {
     if (selectedId === wanted) {
       return { ok: true, stage, id: wanted, copiedText: selected.text, attempts: attempt };
     }
-    lastReason = `Tentativa ${attempt}: a celula selecionada copiou "${String(selected.text || '').trim()}".`;
+    lastReason = `Tentativa ${attempt}: a célula selecionada copiou "${String(selected.text || '').trim()}".`;
   }
 
   return {
     ok: false,
     stage: `${stage}-verify`,
-    reason: `Busca do Excel nao confirmou a celula alvo apos 2 tentativas. Esperado Id HugMe ${id}, ultimo valor copiado "${String(lastCopiedText || '').trim()}". ${lastReason} Nao vou colar.`.trim()
+    reason: `Busca do Excel não confirmou a célula alvo após ${EXCEL_FIND_ATTEMPT_WAITS_MS.length} tentativas. Esperado Id HugMe ${id}, último valor copiado "${String(lastCopiedText || '').trim()}". ${lastReason} Não vou colar.`.trim()
   };
 }
 
@@ -419,12 +517,15 @@ async function findExcelMotherSheetTabForSettings(settings) {
 
 async function applyExcelWorkbookUpdate(preferredExcelTabId = null) {
   const settings = await getStoredSettings();
+  let cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
+
   const report = getLatestParsedRaReport();
   if (!report?.rows?.length) {
     return {
       ok: false,
       stage: 'excel-report',
-      reason: 'Nenhum relatorio RA validado esta disponivel para colar na planilha mae.'
+      reason: 'Nenhum relatório RA validado está disponível para colar na planilha mãe.'
     };
   }
 
@@ -436,27 +537,36 @@ async function applyExcelWorkbookUpdate(preferredExcelTabId = null) {
     return {
       ok: false,
       stage: 'excel-tab',
-      reason: 'Aba da Planilha Mae no Excel Web nao encontrada.'
+      reason: 'Aba da Planilha Mãe no Excel Web não encontrada.'
     };
   }
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   return applyExcelWorkbookUpdateViaKeyboard(excelTab, report, null);
 }
 
 async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null) {
   const settings = await getStoredSettings();
+  let cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
+
   const reportRows = report.rows || [];
   const anchorId = report.firstId || getRowId(reportRows[0]);
   const tsv = buildRowsTsv(reportRows);
 
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Assumindo foco da Planilha Mae...' });
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Assumindo foco da Planilha Mãe...' });
   await focusWindow(excelTab.windowId);
   await activateTab(excelTab.id);
   await delay(500);
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Confirmando aba Relatorio de Tickets...' });
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Confirmando aba Relatório de Tickets...' });
   const worksheet = await verifyExcelWorksheetReady(excelTab.id, settings);
   if (!worksheet.ok) return worksheet;
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   const target = { tabId: excelTab.id };
   const attached = await debuggerAttach(target);
@@ -464,22 +574,29 @@ async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null
     return {
       ok: false,
       stage: 'excel-debugger',
-      reason: `Nao consegui anexar o Chrome Debugger na aba da Planilha: ${attached.reason}`
+      reason: `Não consegui anexar o Chrome Debugger na aba da Planilha: ${attached.reason}`
     };
   }
 
   try {
-    await setRaBiWorkflowStatus({ running: true, activeText: `Procurando ID ancora ${anchorId} na Planilha...` });
+    await setRaBiWorkflowStatus({ running: true, activeText: `Procurando ID âncora ${anchorId} na Planilha...` });
     let sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
     if (!sent.ok) return { ok: false, stage: 'excel-keyboard', reason: `Escape via debugger falhou: ${sent.reason}` };
     await delay(150);
+    cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+    if (cancelled) return cancelled;
 
     let found = await findExcelIdWithSearch(target, anchorId, 'excel-find-anchor');
     if (!found.ok) return found;
+    cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+    if (cancelled) return cancelled;
 
-    await setRaBiWorkflowStatus({ running: true, activeText: `Colando ${reportRows.length} linhas do relatorio...` });
+    await setRaBiWorkflowStatus({ running: true, activeText: `Colando ${reportRows.length} linhas do relatório...` });
     sent = await copyText(tsv);
     if (!sent.ok) return { ...sent, stage: 'clipboard' };
+    cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+    if (cancelled) return cancelled;
+
     sent = await dispatchDebuggerCtrlShortcut(target, 'v', 'KeyV', 86);
     if (!sent.ok) return { ok: false, stage: 'excel-paste', reason: `Ctrl+V na planilha falhou: ${sent.reason}` };
     await delay(300);
@@ -496,7 +613,7 @@ async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null
     reportColumnCount: RABI_TARGET_COLUMNS.length,
     usedKeyboardFallback: !plan?.ok,
     plan,
-    message: `Colei ${reportRows.length} linhas x ${RABI_TARGET_COLUMNS.length} colunas na Planilha Mae a partir do ID ancora ${anchorId}.`
+    message: `Colei ${reportRows.length} linhas x ${RABI_TARGET_COLUMNS.length} colunas na Planilha Mãe a partir do ID âncora ${anchorId}.`
   };
 }
 
@@ -507,7 +624,7 @@ async function prepareExcelWorkbook(preferredExcelTabId = null) {
     return {
       ok: false,
       stage: 'excel-report',
-      reason: 'Nenhum relatorio RA ja foi lido nesta execucao. Rode RA > BI para gerar e parsear o XLSX primeiro.'
+      reason: 'Nenhum relatório RA já foi lido nesta execução. Rode RA > BI para gerar e ler o XLSX primeiro.'
     };
   }
 
@@ -519,7 +636,7 @@ async function prepareExcelWorkbook(preferredExcelTabId = null) {
     return {
       ok: false,
       stage: 'excel-tab',
-      reason: 'Aba da Planilha Mae no Excel Web nao encontrada.'
+      reason: 'Aba da Planilha Mãe no Excel Web não encontrada.'
     };
   }
 
@@ -533,7 +650,7 @@ async function prepareExcelWorkbook(preferredExcelTabId = null) {
     reportColumnCount: RABI_TARGET_COLUMNS.length,
     firstReportId: report.firstId || getRowId(report.rows[0]),
     worksheetName: worksheet.worksheetName,
-    message: `Planilha Mae pronta: aba ${worksheet.worksheetName || getExpectedExcelWorksheetName(settings)} confirmada. Proxima etapa: RA > BI pode procurar o ID ancora e colar ${report.rows.length} linhas.`
+    message: `Planilha Mãe pronta: aba ${worksheet.worksheetName || getExpectedExcelWorksheetName(settings)} confirmada. Próxima etapa: RA > BI pode procurar o ID âncora e colar ${report.rows.length} linhas.`
   };
 }
 

@@ -15,7 +15,7 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 - Popup: compact white top-right surface with drag, gear, close, outline `HugMe`/`Planilha` tracked-tab buttons, `RA > BI`, loading/current-process line, and stacked warning/result notices.
 - HugMe/Planilha buttons use green/check for ready, blue/spinner for checking, and red/X for blocked/login/permisson states.
 - Options: compact page with enable toggle/header, shortcut row, auto-run controls, and popup preview.
-- Options also includes `Execucao Automatica`: off-by-default `Auto Run RA>BI`, local 24-hour time displayed as `16:00h`, and day buttons `D S T Q Q S S` defaulting to Monday-Friday.
+- Options also includes `Execução Automática`: off-by-default `Auto Run RA>BI`, local 24-hour time displayed as `16:00h`, and day buttons `D S T Q Q S S` defaulting to Monday-Friday.
 - Shortcut row: Chrome activation shortcut opens Chrome's shortcut page and refreshes the displayed key boxes after editing.
 - Version: scaffolded but hidden until a remote/release source exists.
 - Support: placeholders only; configure later.
@@ -31,7 +31,8 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 - RaBiTool groups its assigned tabs as `RaBiTool` when Chrome allows it. Chrome only supports named tab-group colors, so the group uses Chrome's `green` color as the closest match to the `RA > BI` button.
 - RaBiTool reuses only the tab/group IDs it recorded for the current extension load. It does not attach to random already-open HugMe/Planilha tabs, and it ignores old groups that happen to be named `RaBiTool` after an extension reload/install.
 - Tracked tabs should stay smart: if login/auth appears, show blocked; after login succeeds and lands elsewhere, send the same tab back to the target HugMe/Planilha URL automatically.
-- If either reserved tab is missing when `RA > BI` starts, the tool should recreate/reassign it, wait for readiness, and then proceed. If it still cannot prepare required tabs, it should stop with `Abas reservadas do HugMe e Planilha Mae nao preparadas` or with a more specific HugMe/Planilha readiness warning.
+- If either reserved tab is missing when `RA > BI` starts, the tool should recreate/reassign it, wait for readiness, and then proceed. If it still cannot prepare required tabs, it should stop with `Abas reservadas do HugMe e Planilha Mãe não preparadas` or with a more specific HugMe/Planilha readiness warning.
+- Toggling RaBiTool off is a hard shutdown, not just hiding the popup. Toolbar/shortcut toggle-off, popup close, and options toggle-off cancel any active RA > BI run, close the tracked HugMe/Planilha tabs, clear workspace tracking, and disable the extension. This also applies to auto-run.
 - If a tab exists but required elements are still loading, wait briefly; if still missing, stop with a clear error.
 - Current destination behavior: find the oldest incoming report ticket in the mother sheet, verify that Excel selected that exact anchor, then paste the normalized report rows from that row downward.
 - The tool handles two spreadsheet objects: a fresh incoming RA report and a large existing mother sheet.
@@ -46,12 +47,12 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 - RA report setup uses `Data Reclamação` with order type `ascendente`, so latest rows are at the bottom like the mother sheet.
 - RA processing is watched inside the HugMe page up to every 1 second and blocked after 420 seconds if the report is not downloadable.
 - Current build continues through download, XLSX validation, guarded Excel Web worksheet confirmation, keyboard-based anchor verification, TSV preparation, clipboard copy, and one-block paste when safe.
-- Excel Web phase currently must focus/activate the Planilha tab because Excel Find, selection, copy, clipboard read, and paste are tied to the active workbook surface. This is acceptable for now as long as the popup makes the step clear, for example `Validando Planilha Mae...` followed by an explicit focus/paste status.
-- Before writing, the tool checks that the active Excel worksheet is the configured destination, currently `Relatorio de Tickets`; if not, it blocks before search/paste. It then searches the oldest report ID, confirms the selected cell, pastes there, and does not press Enter after paste.
+- Excel Web phase currently must focus/activate the Planilha tab because Excel Find, selection, copy, clipboard read, and paste are tied to the active workbook surface. This is acceptable for now as long as the popup makes the step clear, for example `Validando Planilha Mãe...` followed by an explicit focus/paste status.
+- Before writing, the tool checks that the active Excel worksheet is the configured destination, currently `Relatório de Tickets`; if not, it blocks before search/paste. It then opens Excel Find, confirms the Find input is ready, searches the oldest report ID, confirms the selected cell, pastes there, and does not press Enter after paste. The Find/anchor proof retries up to six increasingly patient attempts for slower machines.
 - Future Excel Web writing should prefer a single contiguous paste action, so the owner can use one `Ctrl+Z` in Excel Web to revert the extension's write during review/testing.
 - The extension should avoid using arbitrary existing RA/Excel tabs. Excel Web paste currently requires focusing the reserved Planilha tab; the popup should keep this step explicit rather than silently stealing view.
 - Auto-run is independent from manual popup visibility. If enabled, it runs from a Chrome alarm at the configured local time/day, enables RaBiTool status/popup for the run, opens/prepares reserved tabs, and uses the same `RA > BI` workflow. Missed times are skipped, not caught up later.
-- RA > BI is one-run-at-a-time. A second manual click or an auto-run firing while another run is active should be skipped, not queued and not allowed to interrupt the active run.
+- RA > BI is one-run-at-a-time. A second manual click or an auto-run firing while another run is active is skipped, not queued. Toggle-off is the explicit user cancellation path.
 
 ## Popup Direction
 

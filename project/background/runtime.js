@@ -13,22 +13,62 @@ function runWorkflowAction(action, message, sender) {
 
 function openSideTab(url, openerTab, callback) {
   const safeUrl = String(url || '').trim();
-  if (!safeUrl) return callback?.({ ok: false, reason: 'URL nao informada.' });
+  if (!safeUrl) return callback?.({ ok: false, reason: 'URL não informada.' });
   const props = { url: safeUrl, active: false };
   if (Number.isInteger(openerTab?.id)) props.openerTabId = openerTab.id;
   if (Number.isInteger(openerTab?.index)) props.index = openerTab.index + 1;
   chrome.tabs.create(props, (tab) => {
-    if (chrome.runtime.lastError || !tab) return callback?.({ ok: false, reason: 'Nao consegui abrir a aba solicitada.' });
+    if (chrome.runtime.lastError || !tab) return callback?.({ ok: false, reason: 'Não consegui abrir a aba solicitada.' });
     callback?.({ ok: true, tabId: tab.id });
   });
 }
 
 function sendToTab(tabId, message, callback) {
-  if (!Number.isInteger(tabId)) return callback?.({ ok: false, reason: 'Aba nao informada.' });
+  if (!Number.isInteger(tabId)) return callback?.({ ok: false, reason: 'Aba não informada.' });
   chrome.tabs.sendMessage(tabId, message, (response) => {
-    if (chrome.runtime.lastError) return callback?.({ ok: false, reason: 'Popup/conteudo da aba nao esta disponivel.' });
+    if (chrome.runtime.lastError) return callback?.({ ok: false, reason: 'Popup/conteúdo da aba não está disponível.' });
     callback?.(response || { ok: true });
   });
+}
+
+function getLocalStorage(keys) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(keys, (data) => resolve(data || {}));
+  });
+}
+
+function setLocalStorage(patch) {
+  return new Promise((resolve) => {
+    chrome.storage.local.set(patch, () => {
+      resolve({ ok: !chrome.runtime.lastError, reason: chrome.runtime.lastError?.message || '' });
+    });
+  });
+}
+
+async function setRaBiToolEnabled(enabled, openerTab = null) {
+  const nextEnabled = enabled !== false;
+  const data = await getLocalStorage(SETTINGS_KEY);
+  const settings = withDefaultSettings(data?.[SETTINGS_KEY]);
+  settings.enabled = nextEnabled;
+  const saved = await setLocalStorage({ enabled: nextEnabled, [SETTINGS_KEY]: settings });
+  if (!saved.ok) return saved;
+
+  if (nextEnabled) {
+    clearFinishedRaBiWorkflowStatus();
+    await ensureWorkspaceTabs(openerTab, { forceNew: true });
+    return { ok: true, enabled: true };
+  }
+
+  await requestRaBiWorkflowCancel('RA > BI cancelado pelo usuário.');
+  const closed = await closeTrackedWorkspaceTabs();
+  return {
+    ok: closed.ok,
+    enabled: false,
+    cancelledWorkflow: true,
+    closedWorkspaceTabs: true,
+    removedTabIds: closed.removedTabIds || [],
+    reason: closed.reason || ''
+  };
 }
 
 chrome.runtime.onInstalled.addListener((details) => {
@@ -46,16 +86,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 chrome.action?.onClicked?.addListener((tab) => {
-  chrome.storage.local.get(['enabled', SETTINGS_KEY], ({ enabled, [SETTINGS_KEY]: rawSettings }) => {
-    const nextEnabled = !enabled;
-    const settings = withDefaultSettings(rawSettings);
-    settings.enabled = nextEnabled;
-    chrome.storage.local.set({ enabled: nextEnabled, [SETTINGS_KEY]: settings }, () => {
-      if (nextEnabled) {
-        clearFinishedRaBiWorkflowStatus();
-        ensureWorkspaceTabs(tab, { forceNew: true });
-      }
-    });
+  chrome.storage.local.get(['enabled'], ({ enabled }) => {
+    setRaBiToolEnabled(!enabled, tab);
   });
 });
 
@@ -67,18 +99,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.action === 'SET_ENABLED') {
-    chrome.storage.local.get(SETTINGS_KEY, (data) => {
-      const enabled = message.enabled !== false;
-      const settings = withDefaultSettings(data?.[SETTINGS_KEY]);
-      settings.enabled = enabled;
-      chrome.storage.local.set({ enabled, [SETTINGS_KEY]: settings }, () => {
-        if (enabled) {
-          clearFinishedRaBiWorkflowStatus();
-          ensureWorkspaceTabs(sender.tab, { forceNew: true });
-        }
-        sendResponse({ ok: !chrome.runtime.lastError });
-      });
-    });
+    setRaBiToolEnabled(message.enabled !== false, sender.tab).then(sendResponse);
     return true;
   }
 

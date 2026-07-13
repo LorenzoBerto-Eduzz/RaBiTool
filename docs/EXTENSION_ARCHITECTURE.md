@@ -13,7 +13,7 @@ RaBiTool is a no-build Chrome Manifest V3 extension.
 - `project/background/clipboard.js`: offscreen clipboard helper for Excel Web paste/import flows.
 - `project/background/xlsx_report_parser.js`: direct XLSX ZIP/XML reader and 9-column RA report normalizer.
 - `project/background/reclame_aqui.js`: Reclame Aqui source-page automation, HugMe page-side report/download watcher, and Chrome XLSX download detection.
-- `project/background/excel_sheet.js`: Excel Web worksheet guard, keyboard/debugger Find navigation, anchor verification, TSV preparation, clipboard copy, and one-block paste.
+- `project/background/excel_sheet.js`: Excel Web worksheet guard, keyboard/debugger Find navigation, confirmed Find-dialog readiness, anchor verification, TSV preparation, clipboard copy, and one-block paste.
 - `project/background/ra_bi_workflow.js`: workflow action names and orchestration scaffold.
 - `project/background/autorun.js`: Chrome alarm scheduler for optional timed RA > BI execution.
 - `project/background/runtime.js`: Chrome runtime listeners, workflow registration map, popup/settings message routing, and side-tab helper.
@@ -66,11 +66,15 @@ RaBiTool owns a reserved pair of HugMe/Planilha tabs. On activation and on `RA >
 
 Assigned tabs are grouped as `RaBiTool` when Chrome allows it. Chrome tab groups support named colors rather than custom hex colors, so the extension uses Chrome's `green` group color as the closest available match to the `RA > BI` button.
 
+Disabling RaBiTool is a hard session cleanup. The shared `SET_ENABLED=false` path cancels any active RA > BI run, closes the tracked HugMe/Planilha tabs, and clears workspace tracking. Do not bypass this centralized path from popup, toolbar, shortcut, options, or future controls.
+
 ## Auto Run
 
-The options page includes `Execucao Automatica`: an off-by-default `Auto Run RA>BI` toggle, local 24-hour time field displayed as `16:00h`, and day buttons `D S T Q Q S S` with Monday-Friday selected by default. The background scheduler uses `chrome.alarms` and one-shot scheduling for the next selected day/time. If Chrome or the machine wakes too late after the configured time, the run is marked missed and skipped instead of running unexpectedly.
+The options page includes `Execução Automática`: an off-by-default `Auto Run RA>BI` toggle, local 24-hour time field displayed as `16:00h`, and day buttons `D S T Q Q S S` with Monday-Friday selected by default. The background scheduler uses `chrome.alarms` and one-shot scheduling for the next selected day/time. If Chrome or the machine wakes too late after the configured time, the run is marked missed and skipped instead of running unexpectedly.
 
 Auto-run does not require the manual popup toggle to already be on. When the alarm fires, it enables RaBiTool for the session so the popup/status can appear, prepares reserved tabs, and calls the same guarded workflow as the manual `RA > BI` button. The final Excel Web paste still needs focused Planilha tab control because it uses UI keyboard/clipboard automation.
+
+After an auto-run RA > BI execution returns, the autorun path disables RaBiTool through the shared hard-cleanup helper. This closes the tracked HugMe/Planilha tabs and clears workspace tracking. Manual RA > BI executions intentionally stay open after completion.
 
 ## Permissions
 
@@ -103,6 +107,7 @@ This project intentionally uses browser UI automation instead of API integration
 - prefer explicit owner-confirmed button labels/selectors;
 - use clipboard/import only where Chrome and Excel Web allow it reliably.
 - for the current Excel Web write path, explicitly focus the Excel tab before keyboard/debugger actions and clearly show that step in popup status text.
+- for Excel Find, treat `Ctrl+F` as a requested action rather than proof of readiness: confirm the Find input appears, confirm the searched ID was written into it, and confirm the selected cell copies back as that same ID before pasting. The current guard retries this up to six times with increasing waits for slower machines.
 
 ## Local Release Exports
 

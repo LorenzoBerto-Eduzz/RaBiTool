@@ -96,16 +96,18 @@ For the current implementation phase, RaBiTool owns reserved RA and mother-sheet
 - The `HugMe`/`Planilha` buttons in the popup show readiness status and intentionally focus the tracked tab when clicked.
 - The background should continuously listen to tracked tab URL/status changes. When login/auth is detected, mark the tab blocked; after login resolves away from auth but not on the target page, automatically navigate that same tracked tab back to the exact target URL.
 - The floating popup cannot appear on Chrome internal pages such as the default new tab / `chrome://newtab`, because Chrome does not allow extension content scripts there.
+- Toggling RaBiTool off is a hard session shutdown. Toolbar/shortcut toggle-off, popup close, and options toggle-off cancel any active RA > BI run, close the tracked HugMe and Planilha tabs, clear workspace tracking, and set the extension disabled. This applies whether the run was started manually or by auto-run.
 
 ## Scheduled Auto Run
 
-- The options page has an `Execucao Automatica` section.
+- The options page has an `Execução Automática` section.
 - Auto-run is off by default.
 - Default auto-run time is `16:00` in the user's local device time, shown as a plain 24-hour `HH:mmh` value.
 - The user selects active weekdays with seven buttons labeled `D S T Q Q S S`; Monday-Friday are selected by default.
 - The background uses Chrome alarms to schedule the next selected local day/time as a one-shot alarm, then reschedules after each alarm fires or settings change.
 - If Chrome/laptop is closed, asleep, or wakes too late for the configured time, the run is skipped rather than executed later as a catch-up.
 - When the scheduled run fires on time, it enables/shows RaBiTool status, prepares the reserved tabs, waits for readiness, and runs the same guarded `RA > BI` workflow as the manual button.
+- When a scheduled RA > BI run returns, RaBiTool automatically toggles itself off through the shared hard-shutdown path, closing the tracked HugMe/Planilha tabs and clearing workspace tracking. Manual runs do not auto-close after completion.
 - Only one RA > BI workflow may run at a time. If the user clicks `RA > BI` while another run is active, or an auto-run alarm fires during a manual run, the second request is skipped and the first run continues.
 - The Excel Web paste phase still focuses the Planilha tab because current UI-based find/copy/paste cannot safely run in the background.
 
@@ -201,9 +203,11 @@ The current sequence is:
 
 1. Activate/focus the tracked Excel Web tab.
 2. Confirm the active worksheet tab is exactly the configured worksheet, currently `Relatorio de Tickets`. The primary signal is Excel Web's sheet tab bar with `role="tab"` and `aria-selected="true"`; if the active worksheet cannot be proven, block before touching data.
-3. Use `Ctrl+F` in Excel Web, paste the oldest incoming report `Id HugMe`, and press Enter.
-4. Close Find, copy the selected cell, and verify the selected value equals the expected oldest report ID.
-5. Copy the prepared 9-column TSV and send one `Ctrl+V` on that anchor cell, without pressing Enter afterward, so Excel does not move the selection down after paste.
+3. Use `Ctrl+F` in Excel Web and confirm the Find dialog/input is visible and writable.
+4. Paste/fill the oldest incoming report `Id HugMe`, confirm the Find field contains that ID, press Enter twice, and wait for Excel selection to settle.
+5. Close Find, copy the selected cell, and verify the selected value equals the expected oldest report ID.
+6. Retry the Find/anchor proof up to six increasingly patient attempts (`500ms` through `3000ms`) on slower machines.
+7. Copy the prepared 9-column TSV and send one `Ctrl+V` on that anchor cell, without pressing Enter afterward, so Excel does not move the selection down after paste.
 
 Known limitation: this UI-based Excel phase needs focus because Excel Web's find, selection, copy, and paste behavior is tied to the active workbook surface and browser clipboard focus rules. A fully no-focus write would require a different integration path such as Microsoft Graph or another API, which the owner has explicitly not chosen for this project.
 

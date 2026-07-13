@@ -299,7 +299,7 @@ async function saveAutorunSettings() {
   optionsSettings = next;
   const response = await sendRuntimeMessage({ action: 'SAVE_RABITOOL_SETTINGS', settings: next });
   if (!response?.ok) {
-    setOptionsPopupStatus('Nao foi possivel salvar a execucao automatica.', 'error');
+    setOptionsPopupStatus('Não foi possível salvar a execução automática.', 'error');
   }
 }
 
@@ -449,7 +449,7 @@ function startOptionsWorkspaceRefresh() {
 async function focusOptionsWorkspaceTab(kind) {
   const response = await sendRuntimeMessage({ action: 'FOCUS_WORKSPACE_TAB', kind });
   const label = kind === 'ra' ? 'HugMe' : 'Planilha';
-  if (!response?.ok) setOptionsPopupStatus(response?.reason || `Nao consegui abrir a aba ${label}.`, 'error');
+  if (!response?.ok) setOptionsPopupStatus(response?.reason || `Não consegui abrir a aba ${label}.`, 'error');
 }
 
 function renderOptionsWorkflowStatus(status) {
@@ -476,7 +476,7 @@ async function runOptionsWorkflowButton(action, activeText = 'Verificando abas..
   if (!response) {
     optionsWorkflowRunning = false;
     setOptionsPopupProgress(false);
-    setOptionsPopupStatus('Nao foi possivel falar com o service worker.', 'error');
+    setOptionsPopupStatus('Não foi possível falar com o service worker.', 'error');
     return;
   }
 }
@@ -493,7 +493,7 @@ async function saveEnabled(enabled) {
   if (!response?.ok) {
     toggle.checked = !nextEnabled;
     setOptionsPopupVisible(!nextEnabled);
-    setOptionsPopupStatus('Nao foi possivel atualizar o estado da extensao.', 'error');
+    setOptionsPopupStatus('Não foi possível atualizar o estado da extensão.', 'error');
   }
 }
 

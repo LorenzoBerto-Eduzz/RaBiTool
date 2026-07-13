@@ -63,7 +63,7 @@ async function findRequiredWorkflowTabs(settings) {
     return {
       ok: false,
       stage: 'tabs',
-      reason: 'Abas reservadas do HugMe e Planilha Mae nao preparadas'
+      reason: 'Abas reservadas do HugMe e Planilha Mãe não preparadas'
     };
   }
 
@@ -83,7 +83,7 @@ async function waitForReservedWorkflowTabs(settings, timeoutMs = 30000) {
   return {
     ok: false,
     stage: 'tabs',
-    reason: last?.reason || 'Abas reservadas do HugMe e Planilha Mae nao ficaram prontas.'
+    reason: last?.reason || 'Abas reservadas do HugMe e Planilha Mãe não ficaram prontas.'
   };
 }
 
@@ -115,7 +115,7 @@ async function waitForWorkspaceReadyOrBlocked(timeoutMs = 30000) {
   return {
     ok: false,
     stage: 'tabs',
-    reason: reasons || 'Abas reservadas do HugMe e Planilha Mae nao ficaram prontas.'
+    reason: reasons || 'Abas reservadas do HugMe e Planilha Mãe não ficaram prontas.'
   };
 }
 
@@ -183,8 +183,8 @@ async function waitForMatchingDownload(title, clickedAtMs, timeoutMs) {
   return {
     ok: false,
     reason: lastSeen
-      ? `O XLSX apareceu, mas nao terminou dentro do tempo limite: ${lastSeen}`
-      : 'O download do XLSX nao iniciou/terminou dentro do tempo limite.'
+      ? `O XLSX apareceu, mas não terminou dentro do tempo limite: ${lastSeen}`
+      : 'O download do XLSX não iniciou/terminou dentro do tempo limite.'
   };
 }
 
@@ -218,7 +218,7 @@ function setupRaReportFormInPage(args) {
       if (element) return element;
       await sleep(250);
     }
-    throw new Error(`Elemento nao encontrado: ${label || selector}`);
+    throw new Error(`Elemento não encontrado: ${label || selector}`);
   }
 
   function dispatchInput(element) {
@@ -262,7 +262,7 @@ function setupRaReportFormInPage(args) {
       return normalizeComparable(item.label) === expected ||
         normalizeComparable(item.textContent) === expected;
     });
-    if (!option) throw new Error(`Opcao nao encontrada: ${label}`);
+    if (!option) throw new Error(`Opção não encontrada: ${label}`);
     if (select.value !== option.value) {
       select.value = option.value;
       dispatchInput(select);
@@ -302,10 +302,10 @@ function setupRaReportFormInPage(args) {
     input.dispatchEvent(new Event('blur', { bubbles: true }));
     await sleep(250);
     if (normalizeDateValue(input.value) !== value) {
-      throw new Error(`Campo ${label} nao confirmou a data ${value}. Valor atual: ${input.value || 'vazio'}.`);
+      throw new Error(`Campo ${label} não confirmou a data ${value}. Valor atual: ${input.value || 'vazio'}.`);
     }
     if (!isFormattedDate(input.value, value)) {
-      throw new Error(`Campo ${label} nao ficou no formato ${formatted}. Valor atual: ${input.value || 'vazio'}.`);
+      throw new Error(`Campo ${label} não ficou no formato ${formatted}. Valor atual: ${input.value || 'vazio'}.`);
     }
   }
 
@@ -316,10 +316,10 @@ function setupRaReportFormInPage(args) {
       issues.push(`empresa=${selectedText(fields.company) || 'vazio'}`);
     }
     if (String(fields.titleInput.value || '').trim() !== title) {
-      issues.push(`titulo=${fields.titleInput.value || 'vazio'}`);
+      issues.push(`título=${fields.titleInput.value || 'vazio'}`);
     }
     if (!fields.periodRadio.checked) {
-      issues.push('periodo A definir nao marcado');
+      issues.push('período A definir não marcado');
     }
     if (normalizeDateValue(fields.startInput.value) !== startDate) {
       issues.push(`data inicial=${fields.startInput.value || 'vazio'}`);
@@ -328,16 +328,16 @@ function setupRaReportFormInPage(args) {
       issues.push(`data final=${fields.endInput.value || 'vazio'}`);
     }
     if (normalizeComparable(selectedText(fields.order)) !== normalizeComparable(orderLabel)) {
-      issues.push(`ordenacao=${selectedText(fields.order) || 'vazio'}`);
+      issues.push(`ordenação=${selectedText(fields.order) || 'vazio'}`);
     }
     if (normalizeComparable(selectedText(fields.orderType)) !== normalizeComparable(orderTypeLabel)) {
-      issues.push(`tipo ordenacao=${selectedText(fields.orderType) || 'vazio'}`);
+      issues.push(`tipo ordenação=${selectedText(fields.orderType) || 'vazio'}`);
     }
     if (!fields.selectAll.checked) {
-      issues.push('selecionar todos nao marcado');
+      issues.push('selecionar todos não marcado');
     }
     if (issues.length) {
-      throw new Error(`HugMe nao confirmou os campos antes de gerar relatorio: ${issues.join('; ')}`);
+      throw new Error(`HugMe não confirmou os campos antes de gerar relatório: ${issues.join('; ')}`);
     }
   }
 
@@ -346,10 +346,10 @@ function setupRaReportFormInPage(args) {
       const company = await waitFor('select.empresa', 'empresa');
       selectByLabel(company, companyLabel);
 
-      const titleInput = await waitFor('input.titulo', 'titulo');
+      const titleInput = await waitFor('input.titulo', 'título');
       setText(titleInput, title);
 
-      const periodRadio = await waitFor('#periodoADefinir', 'periodo A definir');
+      const periodRadio = await waitFor('#periodoADefinir', 'período A definir');
       if (!periodRadio.checked) periodRadio.click();
 
       const startInput = await waitFor('#starty', 'data inicial');
@@ -359,14 +359,14 @@ function setupRaReportFormInPage(args) {
         await sleep(250);
       }
       if (startInput.disabled || endInput.disabled) {
-        throw new Error('Campos de periodo continuam desabilitados apos selecionar A definir.');
+        throw new Error('Campos de período continuam desabilitados após selecionar A definir.');
       }
       await setDateText(startInput, startDate, 'data inicial');
       await setDateText(endInput, endDate, 'data final');
 
-      const order = await waitFor('select.order', 'ordenacao');
+      const order = await waitFor('select.order', 'ordenação');
       selectByLabel(order, orderLabel);
-      const orderType = await waitFor('select.order-type', 'tipo de ordenacao');
+      const orderType = await waitFor('select.order-type', 'tipo de ordenação');
       selectByLabel(orderType, orderTypeLabel);
 
       const selectAll = await waitFor('#selAll', 'selecionar todos');
@@ -377,7 +377,7 @@ function setupRaReportFormInPage(args) {
       const button = Array.from(document.querySelectorAll('button')).find((item) => {
         return visible(item) && item.textContent.trim().toLowerCase() === 'gerar relatório';
       });
-      if (!button) throw new Error('Botao Gerar relatorio nao encontrado.');
+      if (!button) throw new Error('Botão Gerar relatório não encontrado.');
       button.click();
 
       return {
@@ -469,12 +469,12 @@ function waitForAndClickRaReportDownloadInPage(args) {
         return {
           ok: false,
           stage: 'ra-download',
-          reason: `Mais de um relatorio encontrado com o titulo/token ${title}.`
+          reason: `Mais de um relatório encontrado com o título/token ${title}.`
         };
       }
 
       if (!matches.length) {
-        lastStatus = 'relatorio ainda nao apareceu na lista';
+        lastStatus = 'relatório ainda não apareceu na lista';
         await sleep(pollingMs);
         continue;
       }
@@ -501,38 +501,52 @@ function waitForAndClickRaReportDownloadInPage(args) {
       const processingButton = buttons.find((button) => {
         return visible(button) && button.textContent.toLowerCase().includes('processando');
       });
-      lastStatus = processingButton ? 'processando' : 'relatorio encontrado sem download visivel';
+      lastStatus = processingButton ? 'processando' : 'relatório encontrado sem download visível';
       await sleep(pollingMs);
     }
 
     return {
       ok: false,
       stage: 'ra-processing',
-      reason: `Relatorio ${title} nao liberou Download em ate ${Math.round(timeoutMs / 1000)} segundos. Ultimo estado: ${lastStatus}.`
+      reason: `Relatório ${title} não liberou Download em até ${Math.round(timeoutMs / 1000)} segundos. Último estado: ${lastStatus}.`
     };
   })();
 }
 
 async function prepareReclameAquiExport() {
   const settings = await getStoredSettings();
+  let cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
+
   await setRaBiWorkflowStatus({ running: true, activeText: 'Preparando abas reservadas...' });
   const workspace = await ensureWorkspaceTabs(null);
   if (!workspace.ok) return workspace;
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
+
   const tabs = await waitForReservedWorkflowTabs(settings);
   if (!tabs.ok) return tabs;
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Aguardando abas carregarem...' });
   await Promise.all([
     waitForTabComplete(tabs.raTab.id, 20000),
     waitForTabComplete(tabs.excelTab.id, 30000)
   ]);
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Aguardando HugMe carregar...' });
   await waitForTabComplete(tabs.raTab.id, 15000);
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Validando abas preparadas...' });
   const readiness = await waitForWorkspaceReadyOrBlocked();
   if (!readiness.ok) return readiness;
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   const now = new Date();
   const lookbackDays = 45;
@@ -556,6 +570,8 @@ async function prepareReclameAquiExport() {
   }]);
 
   if (!setup.ok) return setup;
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Processando relat\u00f3rio...' });
   const clicked = await runFunctionInTab(tabs.raTab.id, waitForAndClickRaReportDownloadInPage, [{
@@ -565,15 +581,19 @@ async function prepareReclameAquiExport() {
     timeoutMs: processingTimeoutMs
   }]);
   if (!clicked.ok) return clicked;
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Relatorio pronto. Iniciando download...' });
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Relatório pronto. Iniciando download...' });
   const clickedAtMs = Number(clicked.clickedAtMs) || Date.now();
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Baixando XLSX pelo Chrome...' });
   const download = await waitForMatchingDownload(title, clickedAtMs, downloadTimeoutMs);
   if (!download.ok) {
-    return { ok: false, stage: 'download', reason: download.reason || 'Download nao encontrado.' };
+    return { ok: false, stage: 'download', reason: download.reason || 'Download não encontrado.' };
   }
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Lendo e validando XLSX...' });
   const parsed = await fetchAndParseRaReportDownload(download);
@@ -585,6 +605,8 @@ async function prepareReclameAquiExport() {
       downloadId: download.downloadId
     };
   }
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   setLatestParsedRaReport({
     title,
@@ -601,7 +623,7 @@ async function prepareReclameAquiExport() {
     rows: parsed.rows
   });
 
-  await setRaBiWorkflowStatus({ running: true, activeText: 'Preparando colagem na Planilha Mae...' });
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Preparando colagem na Planilha Mãe...' });
   const excelResult = await applyExcelWorkbookUpdate(tabs.excelTab.id);
   if (!excelResult.ok) {
     return {
@@ -615,6 +637,8 @@ async function prepareReclameAquiExport() {
       reportLastDate: parsed.lastDate
     };
   }
+  cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
+  if (cancelled) return cancelled;
 
   return {
     ok: true,
@@ -630,13 +654,13 @@ async function prepareReclameAquiExport() {
     reportFirstDate: parsed.firstDate,
     reportLastDate: parsed.lastDate,
     excelResult,
-    message: `RA > BI concluido: ${parsed.rowCount} linhas coladas na Planilha Mae. IDs ${parsed.firstId} -> ${parsed.lastId}.`
+    message: `RA > BI concluído: ${parsed.rowCount} linhas coladas na Planilha Mãe. IDs ${parsed.firstId} -> ${parsed.lastId}.`
   };
 }
 
 async function findLatestRaDownload() {
   if (!chrome.downloads?.search) {
-    return { ok: false, stage: 'download', reason: 'A API de downloads do Chrome nao esta disponivel.' };
+    return { ok: false, stage: 'download', reason: 'A API de downloads do Chrome não está disponível.' };
   }
 
   return new Promise((resolve) => {

@@ -1,19 +1,18 @@
-RaBiTool local release
+RaBiTool - release local
 
-Load this folder as an unpacked Chrome extension:
+Carregue esta pasta como extensão descompactada do Chrome:
 
-1. Open chrome://extensions
-2. Enable Developer mode
-3. Click "Load unpacked"
-4. Select this folder
+1. Abra chrome://extensions
+2. Ative o modo de desenvolvedor
+3. Clique em "Carregar sem compactação"
+4. Selecione esta pasta
 
-Notes:
+Notas:
 
-- This extension is a no-build Chrome MV3 project.
-- The initial workflow is browser UI automation from Reclame Aqui to Excel Web.
-- Exact RA export steps and Excel placement rules still need to be configured before production use.
-- Keep private workbook URLs, exported files, and customer data out of Git.
+- Esta extensão é um projeto Chrome MV3 sem etapa de build.
+- O fluxo principal automatiza o relatório do HugMe até a planilha mãe no Excel Web.
+- Mantenha URLs privadas, arquivos exportados e dados de clientes fora do Git.
 
-Changelog:
+Histórico:
 
-- 0.1.0 RaBiTool project setup and workflow scaffold
+- 0.1.0 Configuração inicial do RaBiTool e fluxo RA > BI

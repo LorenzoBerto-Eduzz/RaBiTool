@@ -69,7 +69,7 @@ function findEndOfCentralDirectory(bytes, view) {
 
 async function inflateZipBytes(bytes) {
   if (typeof DecompressionStream !== 'function') {
-    throw new Error('Chrome nao disponibilizou DecompressionStream para ler XLSX.');
+    throw new Error('Chrome não disponibilizou DecompressionStream para ler XLSX.');
   }
 
   const formats = ['deflate-raw', 'deflate'];
@@ -89,7 +89,7 @@ async function unzipXlsxEntries(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
   const view = new DataView(arrayBuffer);
   const eocdOffset = findEndOfCentralDirectory(bytes, view);
-  if (eocdOffset < 0) throw new Error('Arquivo XLSX invalido: diretorio ZIP nao encontrado.');
+  if (eocdOffset < 0) throw new Error('Arquivo XLSX inválido: diretório ZIP não encontrado.');
 
   const totalEntries = view.getUint16(eocdOffset + 10, true);
   const centralDirOffset = view.getUint32(eocdOffset + 16, true);
@@ -98,7 +98,7 @@ async function unzipXlsxEntries(arrayBuffer) {
 
   for (let index = 0; index < totalEntries; index += 1) {
     if (view.getUint32(offset, true) !== 0x02014b50) {
-      throw new Error('Arquivo XLSX invalido: entrada ZIP corrompida.');
+      throw new Error('Arquivo XLSX inválido: entrada ZIP corrompida.');
     }
 
     const method = view.getUint16(offset + 10, true);
@@ -111,7 +111,7 @@ async function unzipXlsxEntries(arrayBuffer) {
     const name = new TextDecoder().decode(nameBytes).replace(/\\/g, '/');
 
     if (view.getUint32(localOffset, true) !== 0x04034b50) {
-      throw new Error(`Arquivo XLSX invalido: cabecalho local ausente para ${name}.`);
+      throw new Error(`Arquivo XLSX inválido: cabeçalho local ausente para ${name}.`);
     }
 
     const localNameLength = view.getUint16(localOffset + 26, true);
@@ -125,7 +125,7 @@ async function unzipXlsxEntries(arrayBuffer) {
     } else if (method === 8) {
       content = await inflateZipBytes(compressed);
     } else {
-      throw new Error(`Metodo ZIP nao suportado no XLSX: ${method}.`);
+      throw new Error(`Método ZIP não suportado no XLSX: ${method}.`);
     }
 
     entries.set(name, content);
@@ -294,13 +294,13 @@ function validateReportRows(rows) {
   for (const row of rows) {
     const id = String(row['Id HugMe'] || '').trim();
     if (!id) return `Linha ${row.__sourceRowNumber}: Id HugMe vazio.`;
-    if (seen.has(id)) return `Id HugMe duplicado no relatorio: ${id}.`;
+    if (seen.has(id)) return `Id HugMe duplicado no relatório: ${id}.`;
     seen.add(id);
 
     const dateMs = parseReportDateValue(row['Data Reclamação']);
-    if (dateMs === null) return `Linha ${row.__sourceRowNumber}: Data Reclamação invalida.`;
+    if (dateMs === null) return `Linha ${row.__sourceRowNumber}: Data Reclamação inválida.`;
     if (previousDate !== null && dateMs < previousDate) {
-      return 'Relatorio nao esta ordenado de forma ascendente por Data Reclamação.';
+      return 'Relatório não está ordenado de forma ascendente por Data Reclamação.';
     }
     previousDate = dateMs;
   }
@@ -322,7 +322,7 @@ function getReportBoundarySummary(rows) {
 function normalizeReportRowsFromWorksheet(rows, sheetPath) {
   const header = findReportHeader(rows);
   if (!header) {
-    return { ok: false, reason: `Cabecalho esperado nao encontrado em ${sheetPath}.` };
+    return { ok: false, reason: `Cabeçalho esperado não encontrado em ${sheetPath}.` };
   }
 
   const normalizedRows = [];
@@ -395,7 +395,7 @@ async function parseRaReportXlsx(arrayBuffer) {
   return {
     ok: false,
     stage: 'xlsx-parser',
-    reason: failures[0] || 'Nao foi possivel normalizar o relatorio XLSX.'
+    reason: failures[0] || 'Não foi possível normalizar o relatório XLSX.'
   };
 }
 
@@ -405,7 +405,7 @@ async function fetchAndParseRaReportDownload(download) {
     return {
       ok: false,
       stage: 'xlsx-fetch',
-      reason: 'O download nao expos uma URL legivel para buscar o XLSX.'
+      reason: 'O download não expôs uma URL legível para buscar o XLSX.'
     };
   }
 
@@ -415,7 +415,7 @@ async function fetchAndParseRaReportDownload(download) {
       return {
         ok: false,
         stage: 'xlsx-fetch',
-        reason: `Nao foi possivel buscar o XLSX baixado novamente (${response.status}).`
+        reason: `Não foi possível buscar o XLSX baixado novamente (${response.status}).`
       };
     }
 
@@ -425,7 +425,7 @@ async function fetchAndParseRaReportDownload(download) {
     return {
       ok: false,
       stage: 'xlsx-fetch',
-      reason: `Chrome/HugMe bloqueou a leitura automatica do XLSX: ${error?.message || String(error)}`
+      reason: `Chrome/HugMe bloqueou a leitura automática do XLSX: ${error?.message || String(error)}`
     };
   }
 }
@@ -433,7 +433,7 @@ async function fetchAndParseRaReportDownload(download) {
 async function fetchAndParsePackagedRaReport(resourcePath) {
   const path = String(resourcePath || '').replace(/^\/+/, '');
   if (!path) {
-    return { ok: false, stage: 'xlsx-fetch', reason: 'Caminho do XLSX empacotado nao informado.' };
+    return { ok: false, stage: 'xlsx-fetch', reason: 'Caminho do XLSX empacotado não informado.' };
   }
 
   try {
@@ -442,7 +442,7 @@ async function fetchAndParsePackagedRaReport(resourcePath) {
       return {
         ok: false,
         stage: 'xlsx-fetch',
-        reason: `Nao foi possivel ler o XLSX local empacotado (${response.status}): ${path}`
+        reason: `Não foi possível ler o XLSX local empacotado (${response.status}): ${path}`
       };
     }
     const arrayBuffer = await response.arrayBuffer();
@@ -451,7 +451,7 @@ async function fetchAndParsePackagedRaReport(resourcePath) {
     return {
       ok: false,
       stage: 'xlsx-fetch',
-      reason: `Chrome nao conseguiu ler o XLSX local empacotado ${path}: ${error?.message || String(error)}`
+      reason: `Chrome não conseguiu ler o XLSX local empacotado ${path}: ${error?.message || String(error)}`
     };
   }
 }

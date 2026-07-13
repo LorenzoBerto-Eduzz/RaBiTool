@@ -372,7 +372,7 @@
   async function focusWorkspaceTab(kind) {
     const response = await sendMessage({ action: 'FOCUS_WORKSPACE_TAB', kind });
     const label = kind === 'ra' ? 'HugMe' : 'Planilha';
-    if (!response?.ok) setStatus(response?.reason || `Nao consegui abrir a aba ${label}.`, 'error');
+    if (!response?.ok) setStatus(response?.reason || `Não consegui abrir a aba ${label}.`, 'error');
   }
 
   async function runWorkflowButton(action) {
@@ -384,7 +384,7 @@
     if (!response) {
       workflowRunning = false;
       setProgress(false);
-      setStatus('Nao foi possivel falar com o service worker.', 'error');
+      setStatus('Não foi possível falar com o service worker.', 'error');
       return;
     }
   }

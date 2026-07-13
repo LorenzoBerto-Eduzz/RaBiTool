@@ -14,7 +14,7 @@ const WORKSPACE_TAB_DEFS = {
     label: 'Planilha',
     url: 'https://eduzz.sharepoint.com/:x:/s/BI/IQD6u3ZLO0KJTLwdN11bRG8ZAS5Nj2f5Nry7-F5WpL1iDnE?e=qQorVa',
     readyUrlParts: ['eduzz.sharepoint.com', 'excel.officeapps.live.com', 'officeapps.live.com'],
-    loginHints: ['login.microsoftonline.com', 'signin', 'accessdenied', 'acesso negado', 'permission', 'permissao', 'requestaccess', 'solicitaracesso']
+    loginHints: ['login.microsoftonline.com', 'signin', 'accessdenied', 'acesso negado', 'permission', 'permissao', 'permissão', 'requestaccess', 'solicitaracesso']
   }
 };
 
@@ -69,6 +69,33 @@ function setWorkspaceTabs(value) {
   });
 }
 
+function removeChromeTabs(tabIds) {
+  const ids = [...new Set((tabIds || []).filter((id) => Number.isInteger(id)))];
+  if (!ids.length) return Promise.resolve({ ok: true, removedTabIds: [] });
+  return new Promise((resolve) => {
+    chrome.tabs.remove(ids, () => {
+      resolve({
+        ok: !chrome.runtime.lastError,
+        removedTabIds: ids,
+        reason: chrome.runtime.lastError?.message || ''
+      });
+    });
+  });
+}
+
+async function closeTrackedWorkspaceTabs() {
+  const tracked = await getWorkspaceTabs();
+  const tabIds = [tracked?.ra?.tabId, tracked?.bi?.tabId].filter((id) => Number.isInteger(id));
+  const removed = await removeChromeTabs(tabIds);
+  await setWorkspaceTabs({});
+  return {
+    ok: removed.ok,
+    stage: 'workspace-close',
+    removedTabIds: removed.removedTabIds || tabIds,
+    reason: removed.reason || ''
+  };
+}
+
 function getWorkspaceRefreshMark() {
   return new Promise((resolve) => {
     chrome.storage.local.get(WORKSPACE_REFRESH_MARK_KEY, (data) => {
@@ -92,7 +119,7 @@ function createInactiveSideTab(url, openerTab, offset) {
     if (Number.isInteger(openerTab?.index)) props.index = openerTab.index + offset;
     chrome.tabs.create(props, (tab) => {
       if (chrome.runtime.lastError || !tab) {
-        resolve({ ok: false, reason: chrome.runtime.lastError?.message || 'Nao consegui abrir a aba.' });
+        resolve({ ok: false, reason: chrome.runtime.lastError?.message || 'Não consegui abrir a aba.' });
         return;
       }
       resolve({ ok: true, tab });
@@ -111,7 +138,7 @@ async function groupWorkspaceTabs(tabs) {
   return new Promise((resolve) => {
     chrome.tabs.group({ tabIds }, (groupId) => {
       if (chrome.runtime.lastError || !Number.isInteger(groupId)) {
-        resolve({ ok: false, reason: chrome.runtime.lastError?.message || 'Nao consegui agrupar as abas RaBiTool.' });
+        resolve({ ok: false, reason: chrome.runtime.lastError?.message || 'Não consegui agrupar as abas RaBiTool.' });
         return;
       }
       chrome.tabGroups.update(groupId, {
@@ -276,7 +303,7 @@ async function ensureWorkspaceTabs(openerTab, options = {}) {
     ra: ra.ok ? { tabId: ra.tab.id, reused: !!ra.reused, refreshed: !!ra.refreshed } : { error: ra.reason },
     bi: bi.ok ? { tabId: bi.tab.id, reused: !!bi.reused, refreshed: !!bi.refreshed } : { error: bi.reason },
     group,
-    reason: !ra.ok || !bi.ok ? 'Nao consegui abrir/rastrear as abas HugMe e Planilha.' : ''
+    reason: !ra.ok || !bi.ok ? 'Não consegui abrir/rastrear as abas HugMe e Planilha.' : ''
   };
 }
 
@@ -297,7 +324,7 @@ function inspectWorkspacePage(kind) {
       textHit: exportReady
     };
   }
-  const blocked = /access denied|permission|permissao|sem permiss|acesso negado|solicitar acesso|request access/.test(text);
+  const blocked = /access denied|permission|permissao|permissão|sem permiss|acesso negado|solicitar acesso|request access/.test(text);
   const login = /login|signin|senha|entrar|microsoft/.test(text) && /login|signin|oauth|auth/.test(url);
   const excelLikeDom = !!document.querySelector('[aria-label*="Excel"], [data-automation-id*="Grid"], [role="grid"], canvas');
   return {
@@ -317,7 +344,7 @@ async function inspectWorkspaceTabStatus(kind, tab, wasTracked = false) {
       kind,
       label: def.label,
       state: wasTracked ? 'error' : 'checking',
-      reason: wasTracked ? 'Aba rastreada foi fechada ou nao encontrada.' : 'Aguardando abertura da aba...'
+      reason: wasTracked ? 'Aba rastreada foi fechada ou não encontrada.' : 'Aguardando abertura da aba...'
     };
   }
 
@@ -335,7 +362,7 @@ async function inspectWorkspaceTabStatus(kind, tab, wasTracked = false) {
         label: def.label,
         state: login || tab.status === 'complete' ? 'error' : 'checking',
         tabId: tab.id,
-        reason: login ? 'HugMe esta na tela de login.' : 'HugMe abriu fora da pagina de exportacao.'
+        reason: login ? 'HugMe está na tela de login.' : 'HugMe abriu fora da página de exportação.'
       };
     }
   } else if (!isWorkspaceTargetUrl(kind, url)) {
@@ -345,7 +372,7 @@ async function inspectWorkspaceTabStatus(kind, tab, wasTracked = false) {
       label: def.label,
       state: login || tab.status === 'complete' ? 'error' : 'checking',
       tabId: tab.id,
-      reason: login ? 'Planilha pediu login ou permissao.' : 'Planilha abriu fora do arquivo alvo.'
+      reason: login ? 'Planilha pediu login ou permissão.' : 'Planilha abriu fora do arquivo alvo.'
     };
   }
 
@@ -356,20 +383,20 @@ async function inspectWorkspaceTabStatus(kind, tab, wasTracked = false) {
       label: def.label,
       state: 'checking',
       tabId: tab.id,
-      reason: 'Aba aberta, aguardando pagina ficar legivel.'
+      reason: 'Aba aberta, aguardando página ficar legível.'
     };
   }
 
   if (kind === 'ra' && isWorkspaceTargetUrl(kind, url)) {
     if (inspection.login) {
-      return { kind, label: def.label, state: 'error', tabId: tab.id, reason: 'HugMe esta na tela de login.' };
+      return { kind, label: def.label, state: 'error', tabId: tab.id, reason: 'HugMe está na tela de login.' };
     }
     return {
       kind,
       label: def.label,
       state: inspection.textHit ? 'ready' : 'checking',
       tabId: tab.id,
-      reason: inspection.textHit ? 'Pronto.' : 'HugMe aberto; aguardando formulario de exportacao.'
+      reason: inspection.textHit ? 'Pronto.' : 'HugMe aberto; aguardando formulário de exportação.'
     };
   }
 
@@ -377,7 +404,7 @@ async function inspectWorkspaceTabStatus(kind, tab, wasTracked = false) {
     return { kind, label: def.label, state: 'error', tabId: tab.id, reason: 'HugMe pediu login.' };
   }
   if (kind === 'bi' && (inspection.login || inspection.blocked)) {
-    return { kind, label: def.label, state: 'error', tabId: tab.id, reason: inspection.blocked ? 'Planilha sem permissao/acesso.' : 'Planilha pediu login.' };
+    return { kind, label: def.label, state: 'error', tabId: tab.id, reason: inspection.blocked ? 'Planilha sem permissão/acesso.' : 'Planilha pediu login.' };
   }
 
   if (kind === 'bi' && isWorkspaceTargetUrl(kind, url)) {
@@ -414,10 +441,10 @@ async function focusWorkspaceTab(kind) {
   const tracked = await getWorkspaceTabs();
   const tab = await getLiveWorkspaceTab(kind, tracked);
   const label = WORKSPACE_TAB_DEFS[kind]?.label || kind.toUpperCase();
-  if (!tab) return { ok: false, stage: 'workspace-focus', reason: `Aba ${label} nao encontrada.` };
+  if (!tab) return { ok: false, stage: 'workspace-focus', reason: `Aba ${label} não encontrada.` };
   await focusWindow(tab.windowId);
   const focused = await activateTab(tab.id);
   return focused
     ? { ok: true, stage: 'workspace-focus', tabId: tab.id }
-    : { ok: false, stage: 'workspace-focus', reason: `Nao consegui focar a aba ${label}.` };
+    : { ok: false, stage: 'workspace-focus', reason: `Não consegui focar a aba ${label}.` };
 }

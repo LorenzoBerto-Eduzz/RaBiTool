@@ -4,7 +4,7 @@
 
   async function readClipboard() {
     if (!navigator.clipboard?.readText) {
-      return { ok: false, reason: 'navigator.clipboard.readText indisponivel no leitor focado.' };
+      return { ok: false, reason: 'navigator.clipboard.readText indisponível no leitor focado.' };
     }
 
     try {

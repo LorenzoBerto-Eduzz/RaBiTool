@@ -96,7 +96,7 @@ async function syncAutoRunAlarm(settings) {
       enabled: autorun.enabled,
       scheduledFor: '',
       scheduledForMs: 0,
-      reason: autorun.enabled ? 'Nenhum dia selecionado para execucao automatica.' : 'Execucao automatica desligada.'
+      reason: autorun.enabled ? 'Nenhum dia selecionado para execução automática.' : 'Execução automática desligada.'
     });
     return { ok: true, scheduled: false };
   }
@@ -108,7 +108,7 @@ async function syncAutoRunAlarm(settings) {
       enabled: true,
       scheduledFor: '',
       scheduledForMs: 0,
-      reason: 'Nao consegui calcular a proxima execucao automatica.'
+      reason: 'Não consegui calcular a próxima execução automática.'
     });
     return { ok: false, scheduled: false };
   }
@@ -144,19 +144,19 @@ async function runScheduledRaBiWorkflow(meta = {}) {
     await setAutorunMeta({
       lastRunAt: new Date().toISOString(),
       lastResult: 'skipped',
-      lastReason: 'RA > BI ja estava em execucao.'
+      lastReason: 'RA > BI já estava em execução.'
     });
-    return { ok: false, skipped: true, reason: 'RA > BI ja estava em execucao.' };
+    return { ok: false, skipped: true, reason: 'RA > BI já estava em execução.' };
   }
 
   await enablePopupForAutoRun();
   await setRaBiWorkflowStatus({
     running: true,
-    activeText: 'Execucao automatica RA > BI...',
+    activeText: 'Execução automática RA > BI...',
     notices: [{
       level: 'info',
       stage: 'autorun',
-      text: 'Execucao automatica iniciada.'
+      text: 'Execução automática iniciada.'
     }],
     autoRun: true,
     autoRunScheduledFor: meta.scheduledFor || ''
@@ -168,6 +168,7 @@ async function runScheduledRaBiWorkflow(meta = {}) {
     lastReason: result?.message || result?.reason || '',
     lastStage: result?.stage || ''
   });
+  await setRaBiToolEnabled(false, null);
   return result;
 }
 
@@ -187,7 +188,7 @@ async function handleAutoRunAlarm(alarm) {
   const lateByMs = scheduledForMs ? Date.now() - scheduledForMs : 0;
   const graceMs = Number(autorun.lateGraceMinutes || 1) * 60000;
   if (lateByMs > graceMs) {
-    const reason = `Execucao automatica perdida: Chrome/dispositivo acordou ${Math.round(lateByMs / 60000)} min depois do horario.`;
+    const reason = `Execução automática perdida: Chrome/dispositivo acordou ${Math.round(lateByMs / 60000)} min depois do horário.`;
     await setAutorunMeta({
       lastRunAt: new Date().toISOString(),
       lastResult: 'missed',

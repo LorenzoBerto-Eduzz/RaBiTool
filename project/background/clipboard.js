@@ -38,7 +38,7 @@ async function copyText(text) {
         resolve({ ok: false, reason: chrome.runtime.lastError.message });
         return;
       }
-      resolve(response || { ok: false, reason: 'Clipboard nao respondeu.' });
+      resolve(response || { ok: false, reason: 'Clipboard não respondeu.' });
     });
   });
 }
@@ -54,7 +54,7 @@ function waitForClipboardReaderResult(token, timeoutMs = 5000) {
       if (message?.action !== 'RABITOOL_CLIPBOARD_READER_RESULT' || message.token !== token) return;
       clearTimeout(timeout);
       chrome.runtime.onMessage.removeListener(listener);
-      resolve(message.result || { ok: false, reason: 'Leitor de clipboard focado nao retornou resultado.' });
+      resolve(message.result || { ok: false, reason: 'Leitor de clipboard focado não retornou resultado.' });
     }
 
     chrome.runtime.onMessage.addListener(listener);
@@ -71,7 +71,7 @@ async function readTextWithFocusedTab(returnTabId = null) {
   });
 
   if (!readerTab?.id) {
-    return { ok: false, reason: 'Nao consegui abrir o leitor focado de clipboard da extensao.' };
+    return { ok: false, reason: 'Não consegui abrir o leitor focado de clipboard da extensão.' };
   }
 
   const result = await waitForClipboardReaderResult(token);
@@ -103,7 +103,7 @@ async function readText(options = {}) {
         resolve({ ok: false, reason: chrome.runtime.lastError.message });
         return;
       }
-      resolve(response || { ok: false, reason: 'Leitura do clipboard nao respondeu.' });
+      resolve(response || { ok: false, reason: 'Leitura do clipboard não respondeu.' });
     });
   });
 

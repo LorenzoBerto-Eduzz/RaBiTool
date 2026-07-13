@@ -70,10 +70,10 @@ function runFunctionInTab(tabId, func, args = []) {
   return new Promise((resolve) => {
     chrome.scripting.executeScript({ target: { tabId }, func, args }, (results) => {
       if (chrome.runtime.lastError) {
-        resolve({ ok: false, reason: chrome.runtime.lastError.message || 'Nao consegui acessar a aba.' });
+        resolve({ ok: false, reason: chrome.runtime.lastError.message || 'Não consegui acessar a aba.' });
         return;
       }
-      resolve(results?.[0]?.result || { ok: false, reason: 'A aba nao retornou resultado.' });
+      resolve(results?.[0]?.result || { ok: false, reason: 'A aba não retornou resultado.' });
     });
   });
 }
@@ -82,7 +82,7 @@ function runFunctionInTabFrames(tabId, func, args = []) {
   return new Promise((resolve) => {
     chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func, args }, (results) => {
       if (chrome.runtime.lastError) {
-        resolve({ ok: false, reason: chrome.runtime.lastError.message || 'Nao consegui acessar os frames da aba.' });
+        resolve({ ok: false, reason: chrome.runtime.lastError.message || 'Não consegui acessar os frames da aba.' });
         return;
       }
       resolve({

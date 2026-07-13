@@ -8,6 +8,34 @@ const RABITOOL_ACTIONS = {
 
 let raBiWorkflowLock = null;
 
+function isRaBiWorkflowRunning() {
+  return !!raBiWorkflowLock;
+}
+
+function getRaBiWorkflowCancellationResult(stage = 'workflow-cancel') {
+  if (!raBiWorkflowLock?.cancelled) return null;
+  return {
+    ok: false,
+    cancelled: true,
+    stage,
+    reason: raBiWorkflowLock.cancelReason || 'RA > BI cancelado pelo usuário.'
+  };
+}
+
+async function requestRaBiWorkflowCancel(reason = 'RA > BI cancelado pelo usuário.') {
+  if (!raBiWorkflowLock) {
+    return { ok: true, cancelled: false, stage: 'workflow-cancel', reason: 'Nenhum RA > BI em execução.' };
+  }
+  raBiWorkflowLock.cancelled = true;
+  raBiWorkflowLock.cancelReason = reason;
+  await setRaBiWorkflowStatus({
+    running: false,
+    activeText: '',
+    notices: [{ level: 'warn', stage: 'workflow-cancel', text: reason }]
+  });
+  return { ok: true, cancelled: true, stage: 'workflow-cancel', reason };
+}
+
 function normalizeWorkflowNotice(notice) {
   if (!notice) return null;
   const text = String(notice.text || notice.reason || notice.message || '').trim();
@@ -92,7 +120,7 @@ function workflowAlreadyRunningResult() {
     ok: false,
     skipped: true,
     stage: 'workflow-lock',
-    reason: 'RA > BI ja esta em execucao.'
+    reason: 'RA > BI já está em execução.'
   };
 }
 
@@ -110,14 +138,16 @@ async function runExclusiveRaBiWorkflow(activeText, worker) {
     return result;
   }
 
-  raBiWorkflowLock = { startedAt: new Date().toISOString() };
+  raBiWorkflowLock = { startedAt: new Date().toISOString(), cancelled: false, cancelReason: '' };
   try {
     await beginRaBiWorkflow(activeText);
     const result = await worker();
-    await finishRaBiWorkflow(result);
-    return result;
+    const finalResult = getRaBiWorkflowCancellationResult() || result;
+    await finishRaBiWorkflow(finalResult);
+    return finalResult;
   } catch (error) {
-    const result = { ok: false, stage: 'workflow', reason: error?.message || String(error) || 'Erro inesperado no workflow.' };
+    const result = getRaBiWorkflowCancellationResult() ||
+      { ok: false, stage: 'workflow', reason: error?.message || String(error) || 'Erro inesperado no workflow.' };
     await finishRaBiWorkflow(result);
     return result;
   } finally {

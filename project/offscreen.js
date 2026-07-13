@@ -2,7 +2,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.action === 'OFFSCREEN_READ_TEXT') {
     (async () => {
       if (!navigator.clipboard?.readText) {
-        sendResponse({ ok: false, reason: 'navigator.clipboard.readText indisponivel no documento offscreen.' });
+        sendResponse({ ok: false, reason: 'navigator.clipboard.readText indisponível no documento offscreen.' });
         return;
       }
       try {
@@ -24,7 +24,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   async function copyWithClipboardApi() {
     if (!navigator.clipboard?.writeText) {
-      return { ok: false, reason: 'navigator.clipboard.writeText indisponivel no documento offscreen.' };
+      return { ok: false, reason: 'navigator.clipboard.writeText indisponível no documento offscreen.' };
     }
     try {
       await navigator.clipboard.writeText(text);
