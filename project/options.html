@@ -187,6 +187,79 @@
       font: inherit;
       line-height: 1;
     }
+    .autorun-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .autorun-card:not(.is-ready) .autorun-row,
+    .autorun-card:not(.is-ready) .autorun-time-row,
+    .autorun-card:not(.is-ready) .autorun-days {
+      visibility: hidden;
+    }
+    .autorun-divider {
+      height: 1px;
+      background: #dcfce7;
+      margin: -2px 0 16px;
+    }
+    .autorun-label {
+      font-size: 13px;
+      color: #047857;
+      font-weight: 600;
+    }
+    .autorun-time-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .autorun-time-controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      min-width: 0;
+    }
+    .autorun-time {
+      width: 68px;
+      height: 32px;
+      border: 1px solid #bbf7d0;
+      border-radius: 7px;
+      background: #ffffff;
+      color: #047857;
+      font: 700 13px/1 'Segoe UI', system-ui, sans-serif;
+      padding: 0 8px;
+      text-align: center;
+    }
+    .autorun-days {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .autorun-day {
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: #047857;
+      cursor: pointer;
+      font: 700 12px/1 'Segoe UI', system-ui, sans-serif;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    .autorun-day[aria-pressed="true"] {
+      background: #16a34a;
+      border-color: #16a34a;
+      color: #ffffff;
+    }
+    .autorun-day:hover {
+      border-color: #16a34a;
+    }
     .plus {
       font-size: 11px;
       color: #047857;
@@ -230,8 +303,35 @@
       <h2>Atalhos de Teclado</h2>
       <div id="sc-list">
         <div class="sc-row">
-          <span class="sc-name">Ativar / Desativar</span>
+          <span class="sc-name">Ativar / Desativar Popup</span>
           <span class="sc-keys" id="sc-toggle"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card autorun-card" id="autorun-card">
+      <h2>Execucao Automatica</h2>
+      <div class="autorun-divider" aria-hidden="true"></div>
+      <div class="autorun-row">
+        <span class="autorun-label">Auto Run RA&gt;BI</span>
+        <label class="switch is-ready">
+          <input type="checkbox" id="autorun-enabled">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="autorun-time-row">
+        <label class="autorun-label" for="autorun-time">Horario</label>
+        <div class="autorun-time-controls">
+          <div class="autorun-days" id="autorun-days" aria-label="Dias da execucao automatica">
+            <button class="autorun-day" type="button" data-day="0" aria-pressed="false" title="Domingo">D</button>
+            <button class="autorun-day" type="button" data-day="1" aria-pressed="false" title="Segunda">S</button>
+            <button class="autorun-day" type="button" data-day="2" aria-pressed="false" title="Terca">T</button>
+            <button class="autorun-day" type="button" data-day="3" aria-pressed="false" title="Quarta">Q</button>
+            <button class="autorun-day" type="button" data-day="4" aria-pressed="false" title="Quinta">Q</button>
+            <button class="autorun-day" type="button" data-day="5" aria-pressed="false" title="Sexta">S</button>
+            <button class="autorun-day" type="button" data-day="6" aria-pressed="false" title="Sabado">S</button>
+          </div>
+          <input class="autorun-time" id="autorun-time" type="text" inputmode="numeric" maxlength="6" pattern="^([01][0-9]|2[0-3]):[0-5][0-9]h$" placeholder="16:00h" value="16:00h" aria-label="Horario em formato 24 horas">
         </div>
       </div>
     </section>

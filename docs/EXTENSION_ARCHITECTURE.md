@@ -15,6 +15,7 @@ RaBiTool is a no-build Chrome Manifest V3 extension.
 - `project/background/reclame_aqui.js`: Reclame Aqui source-page automation, HugMe page-side report/download watcher, and Chrome XLSX download detection.
 - `project/background/excel_sheet.js`: Excel Web worksheet guard, keyboard/debugger Find navigation, anchor verification, TSV preparation, clipboard copy, and one-block paste.
 - `project/background/ra_bi_workflow.js`: workflow action names and orchestration scaffold.
+- `project/background/autorun.js`: Chrome alarm scheduler for optional timed RA > BI execution.
 - `project/background/runtime.js`: Chrome runtime listeners, workflow registration map, popup/settings message routing, and side-tab helper.
 - `project/content.js`: injected into matching pages. Owns popup creation/binding, popup position, extension toggle behavior, shortcut handling, and workflow button status.
 - `project/popup_ui.js`: pure shared popup markup and CSS string factory.
@@ -65,6 +66,12 @@ RaBiTool owns a reserved pair of HugMe/Planilha tabs. On activation and on `RA >
 
 Assigned tabs are grouped as `RaBiTool` when Chrome allows it. Chrome tab groups support named colors rather than custom hex colors, so the extension uses Chrome's `green` group color as the closest available match to the `RA > BI` button.
 
+## Auto Run
+
+The options page includes `Execucao Automatica`: an off-by-default `Auto Run RA>BI` toggle, local 24-hour time field displayed as `16:00h`, and day buttons `D S T Q Q S S` with Monday-Friday selected by default. The background scheduler uses `chrome.alarms` and one-shot scheduling for the next selected day/time. If Chrome or the machine wakes too late after the configured time, the run is marked missed and skipped instead of running unexpectedly.
+
+Auto-run does not require the manual popup toggle to already be on. When the alarm fires, it enables RaBiTool for the session so the popup/status can appear, prepares reserved tabs, and calls the same guarded workflow as the manual `RA > BI` button. The final Excel Web paste still needs focused Planilha tab control because it uses UI keyboard/clipboard automation.
+
 ## Permissions
 
 Prototype permissions:
@@ -75,6 +82,7 @@ Prototype permissions:
 - `scripting`
 - `commands`
 - `downloads`
+- `alarms`
 - `offscreen`
 - `clipboardWrite`
 - `clipboardRead`
@@ -99,3 +107,7 @@ This project intentionally uses browser UI automation instead of API integration
 ## Local Release Exports
 
 `scripts/Export-LocalRelease.ps1` creates the generated local release folder at the repo root. Do not run it unless the owner explicitly asks for a local release/export. Zip files should only be created when the owner explicitly asks for a zip.
+
+## Future Remote Releases
+
+GitHub remote setup and GitHub Releases are the next planned alignment. A future `remoterelease` workflow should only be implemented after the owner provides exact repo/tag/version/asset rules. Intended direction: upload the packaged extension artifact to GitHub Releases, then add an options-page release/version section that checks the latest release and lets users download it.

@@ -29,3 +29,18 @@ powershell -ExecutionPolicy Bypass -File scripts/Export-LocalRelease.ps1 -Zip
 3. Load the exported folder in Chrome and smoke test.
 4. Confirm no private data is included.
 5. Package the generated folder manually, or run the export script with `-Zip` only when a zip is explicitly wanted.
+
+## Future GitHub Release Flow
+
+Not implemented/aligned yet. The next project step is to set up the GitHub remote and agree on release rules.
+
+Planned owner-facing command: `remoterelease`.
+
+Expected direction, pending exact owner instructions:
+
+1. Create/update the local release artifact.
+2. Create a GitHub Release using the agreed tag/version.
+3. Upload the packaged extension artifact as a release asset.
+4. Later, add a config-page section that checks GitHub Releases for the newest version and provides a button to download the release asset.
+
+Do not invent release tags, asset names, or remote URLs before owner alignment.

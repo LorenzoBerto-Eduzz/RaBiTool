@@ -39,6 +39,7 @@ The project should be developed as a reliable business-data workflow, not as a l
 - RA export/download automation exists for the current HugMe flow, including a page-side watcher for the generated report's Download button and Chrome XLSX download detection by title token.
 - Excel import modules now include XLSX parser/validation, active worksheet guard, keyboard/debugger anchor verification, clipboard TSV preparation, and one-block paste through Excel Web when guards pass.
 - Downloads, offscreen clipboard, tabs, tab groups, scripting, debugger, and commands are available for the prototype.
+- Optional scheduled auto-run uses Chrome alarms, with an off-by-default config section for local time and active weekdays.
 - Activation and `RA > BI` use RaBiTool-owned reserved HugMe/Planilha tabs. Current-load group/tab IDs are reused; arbitrary pre-existing tabs or stale groups named `RaBiTool` are ignored.
 - Broad host permissions remain during discovery.
 - Durable docs capture the current two-spreadsheet model and alignment-first development plan.
@@ -50,7 +51,7 @@ The project should be developed as a reliable business-data workflow, not as a l
 - API/OAuth/Graph-based Excel writes. The current path is focused browser UI automation.
 - Parsing real customer XLSX exports committed to the repo.
 - API integrations with Reclame Aqui, Microsoft Graph, or other external services.
-- Public release packaging.
+- Public/GitHub release automation until the owner aligns the remote, release naming, tag/version rules, and release asset flow.
 
 ## Constraints
 
@@ -62,6 +63,7 @@ The project should be developed as a reliable business-data workflow, not as a l
 - Prefer header-name mapping and explicit validation over fixed column positions.
 - Avoid touching unrelated mother-sheet rows outside the affected time span.
 - After validation guards pass, optimize for quick/automatic execution.
+- Next planned project direction is GitHub remote setup, a future `remoterelease` command for GitHub Releases, and a config-page version/download section.
 
 ## Owner Workflow Commands
 

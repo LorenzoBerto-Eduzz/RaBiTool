@@ -65,6 +65,7 @@ The private sample workbook previously inspected placed the mother-sheet snippet
 - RA form setup alignment: on `https://app.hugme.com.br/app.html#/dados/tickets/exportar/`, choose company `Eduzz`, fill a timestamped title `RaBiToolRelatoriohhmmssddmmyy`, choose period `A definir`, fill date fields directly as `dd/mm/yyyy` with start date execution date minus 45 days and end date execution date, select order field `Data Reclamação`, select order type `ascendente`, select all columns, validate all configured fields, and only then click `Gerar relatório`.
 - RA processing/download alignment: after submit, inject a watcher into the HugMe page. It locates the matching `Meus relatórios` item by exact title or by the `RaBiToolRelatoriohhmmssddmmyy` token, checks up to every 1 second while it shows `Processando relatório...`, blocks after 420 seconds if not ready, then clicks that same item's visible `Download` button. Track the resulting Chrome XLSX download by matching the generated title or title token inside filenames such as `prefix_rabitoolrelatoriohhmmssddmmyy_suffix.xlsx`.
 - Once all guards pass, owner prefers the workflow to proceed automatically/quickly rather than requiring extra confirmation.
+- Auto-run alignment: options page has an `Execucao Automatica` section with an `Auto Run RA>BI` toggle, local-device 24-hour time field displayed as `16:00h`, and day buttons `D S T Q Q S S` defaulting to Monday-Friday selected. Auto-run is off by default. When enabled, it uses Chrome alarms to schedule the next selected day/time and runs only when Chrome is awake/running near that scheduled time; missed wakeups are skipped rather than caught up later.
 - Owner prefers development to move toward the real RA report generation/download flow early, while keeping parser/reconciliation modular and testable.
 - Real customer data, IDs, screenshots, exports, and workbook details must stay out of Git.
 
@@ -90,9 +91,11 @@ The private sample workbook previously inspected placed the mother-sheet snippet
 - Workspace tabs listen continuously with Chrome tab update/remove events. If a tracked tab enters login/auth, the tool marks it blocked; after auth resolves to a non-target page, it automatically navigates the same tracked tab back to the required HugMe export URL or Planilha workbook URL.
 - Chrome internal pages such as the default new tab / `chrome://newtab` cannot receive injected content-script UI, so the floating popup cannot appear on that page. Activation from there can still prepare the reserved workspace tabs; the popup appears once a supported web page or tracked workspace tab is focused.
 - If reserved tabs are missing at `RA > BI` time, the action recreates and assigns them before proceeding. If reserved tabs cannot be prepared or required page elements do not load after bounded waits, stop with a clear stage/element error such as `Abas reservadas do HugMe e Planilha Mae nao preparadas`.
-- Options page currently keeps only the enable toggle/header, Chrome shortcut row, and popup preview. The options-page popup preview also wires the `RA > BI` button to the real runtime action so missing-tab and workflow errors are visible there too. Extra workflow/support/version sections were removed for simplicity.
+- Options page currently keeps the enable toggle/header, Chrome shortcut row, auto-run controls, and popup preview. The options-page popup preview also wires the `RA > BI` button to the real runtime action so missing-tab and workflow errors are visible there too. Extra workflow/support/version sections were removed for simplicity.
 - Default popup placement is top-right. The popup remains draggable and saves deliberate dragged positions under the current top-right position key. Resize/zoom should not save new positions.
 - Toolbar click and Chrome activation shortcut toggle shared `enabled` storage.
+- Scheduled auto-run is independent from manual popup visibility. At its scheduled time it sets RaBiTool enabled so the popup/status can appear, prepares the reserved HugMe/Planilha tabs, and runs the same guarded `RA > BI` workflow. The Excel Web paste phase still focuses the Planilha tab because the current UI/clipboard method requires active workbook focus.
+- RA > BI has a service-worker in-memory run lock. Manual clicks and scheduled auto-run share the same entrypoint, so a second start request is skipped with a warning while the first run continues. The lock is released only after the current workflow finishes or errors.
 
 ## Main Source Files
 
@@ -104,6 +107,7 @@ The private sample workbook previously inspected placed the mother-sheet snippet
 - `project/background/reclame_aqui.js`: RA source/download scaffold.
 - `project/background/excel_sheet.js`: Excel destination no-focus dry-run inspection and future paste support.
 - `project/background/ra_bi_workflow.js`: workflow action names and orchestration scaffold.
+- `project/background/autorun.js`: Chrome alarm scheduling, selected-day/time calculation, missed-run skipping, and scheduled RA > BI launch.
 - `project/background/runtime.js`: runtime message routing.
 - `project/content.js`: injected popup, shortcut behavior, workflow button handlers.
 - `project/popup_ui.js`: shared popup markup and CSS.
@@ -120,6 +124,7 @@ The prototype manifest includes:
 - `scripting`
 - `commands`
 - `downloads`
+- `alarms`
 - `offscreen`
 - `clipboardWrite`
 - `clipboardRead`
@@ -133,11 +138,14 @@ Keep this broad only while discovering. Before release, narrow host permissions 
 
 Current recommended next work:
 
-1. Smoke test the colleague release on a second Chrome profile/machine.
-2. Refine Excel paste edge cases when Excel Find cannot locate the oldest incoming report ID.
-3. Decide whether append-only fallback should be implemented for clearly newer reports.
-4. Add post-paste validation if the owner wants an additional review guard.
-5. Eventually narrow `<all_urls>` permissions to the HugMe and Excel Web hosts once discovery stabilizes.
+1. Set up the GitHub remote/repo and define the owner-approved push/release workflow.
+2. Define `remoterelease`: expected future command should create/update a GitHub Release and upload the local release zip/folder artifact there. Owner will provide exact instructions before implementation.
+3. Add a config-page release/version section after GitHub releases are defined. Intended behavior: check the current GitHub release/version and let the user click a button to download the newest release asset.
+4. Smoke test the colleague release on a second Chrome profile/machine.
+5. Refine Excel paste edge cases when Excel Find cannot locate the oldest incoming report ID.
+6. Decide whether append-only fallback should be implemented for clearly newer reports.
+7. Add post-paste validation if the owner wants an additional review guard.
+8. Eventually narrow `<all_urls>` permissions to the HugMe and Excel Web hosts once discovery stabilizes.
 
 ## First Commit Gate
 
@@ -155,3 +163,4 @@ Before any project commit:
 - `memcheck`: update durable project docs/meta memory only.
 - `gitcheck`: perform `memcheck`, inspect and check the repo, verify Git identity guard when present, then stage, commit, and push if a remote is configured unless the owner says not to.
 - `localrelease`: refresh the generated local release folder from `project/` using `scripts/Export-LocalRelease.ps1`. Do not create a zip unless explicitly requested.
+- Future/unaligned: `remoterelease` should be defined after GitHub remote setup. Expected direction is to package/upload the release artifact to GitHub Releases and support update/version discovery from the config page.

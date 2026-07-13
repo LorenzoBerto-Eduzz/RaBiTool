@@ -8,5 +8,6 @@ importScripts(
   'background/reclame_aqui.js',
   'background/excel_sheet.js',
   'background/ra_bi_workflow.js',
+  'background/autorun.js',
   'background/runtime.js'
 );

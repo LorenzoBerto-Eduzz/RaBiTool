@@ -22,6 +22,12 @@
       reportProcessingTimeoutMs: 420000,
       downloadTimeoutMs: 60000
     },
+    autorun: {
+      enabled: false,
+      time: '16:00',
+      days: [1, 2, 3, 4, 5],
+      lateGraceMinutes: 1
+    },
     shortcuts: {
       togglePopup: '',
       openOptions: ''
@@ -80,6 +86,7 @@
       ...DEFAULT_SETTINGS,
       ...(raw || {}),
       workflow: { ...DEFAULT_SETTINGS.workflow, ...(raw?.workflow || {}) },
+      autorun: { ...DEFAULT_SETTINGS.autorun, ...(raw?.autorun || {}) },
       shortcuts: { ...DEFAULT_SETTINGS.shortcuts, ...(raw?.shortcuts || {}) }
     };
   }

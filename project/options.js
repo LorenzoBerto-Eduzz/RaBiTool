@@ -20,6 +20,12 @@ const DEFAULT_SETTINGS = {
     reportProcessingTimeoutMs: 420000,
     downloadTimeoutMs: 60000
   },
+  autorun: {
+    enabled: false,
+    time: '16:00',
+    days: [1, 2, 3, 4, 5],
+    lateGraceMinutes: 1
+  },
   shortcuts: {
     togglePopup: '',
     openOptions: ''
@@ -30,6 +36,10 @@ const toggle = document.getElementById('toggle-enabled');
 const toggleSwitch = toggle.closest('.switch');
 const shortcutToggleEl = document.getElementById('sc-toggle');
 const shortcutListEl = document.getElementById('sc-list');
+const autorunCardEl = document.getElementById('autorun-card');
+const autorunEnabledEl = document.getElementById('autorun-enabled');
+const autorunTimeEl = document.getElementById('autorun-time');
+const autorunDaysEl = document.getElementById('autorun-days');
 let optionsPopup = null;
 let optionsPopupAnchoredTopRight = false;
 let shortcutRefreshTimer = null;
@@ -40,6 +50,8 @@ let lastOptionsWorkspaceStatus = null;
 let lastOptionsWorkspaceRenderSignature = '';
 let lastOptionsRenderedNoticesSignature = '';
 let lastOptionsProgressSignature = '';
+let optionsSettings = withDefaultSettings();
+let loadingAutorun = false;
 
 const SHORTCUT_WARNING_ICON_HTML = '<span class="sc-add-warning" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L1 21h22L12 3zm1 13h-2v-5h2v5zm0 3h-2v-2h2v2z"/></svg></span>';
 
@@ -48,8 +60,31 @@ function withDefaultSettings(raw = {}) {
     ...DEFAULT_SETTINGS,
     ...(raw || {}),
     workflow: { ...DEFAULT_SETTINGS.workflow, ...(raw?.workflow || {}) },
+    autorun: normalizeAutorunSettings(raw?.autorun),
     shortcuts: { ...DEFAULT_SETTINGS.shortcuts, ...(raw?.shortcuts || {}) }
   };
+}
+
+function normalizeAutorunSettings(raw = {}) {
+  const time = String(raw?.time || DEFAULT_SETTINGS.autorun.time || '16:00').trim().replace(/h$/i, '');
+  const normalizedTime = /^([01]?\d|2[0-3]):[0-5]\d$/.test(time)
+    ? time.replace(/^(\d):/, '0$1:')
+    : DEFAULT_SETTINGS.autorun.time;
+  const days = Array.isArray(raw?.days) ? raw.days : DEFAULT_SETTINGS.autorun.days;
+  return {
+    ...DEFAULT_SETTINGS.autorun,
+    ...(raw || {}),
+    enabled: raw?.enabled === true,
+    time: normalizedTime,
+    days: [...new Set(days.map((day) => Number(day)).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort((a, b) => a - b)
+  };
+}
+
+function formatAutorunTimeInput(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 4);
+  if (digits.length <= 2) return digits;
+  const formatted = `${digits.slice(0, 2)}:${digits.slice(2)}`;
+  return digits.length === 4 ? `${formatted}h` : formatted;
 }
 
 function openShortcutSettings() {
@@ -231,6 +266,41 @@ function sendRuntimeMessage(message) {
       resolve(null);
     }
   });
+}
+
+function getSelectedAutorunDays() {
+  return Array.from(autorunDaysEl?.querySelectorAll('.autorun-day[aria-pressed="true"]') || [])
+    .map((button) => Number(button.dataset.day))
+    .filter((day) => Number.isInteger(day));
+}
+
+function renderAutorunSettings(settings) {
+  const autorun = normalizeAutorunSettings(settings?.autorun);
+  loadingAutorun = true;
+  if (autorunEnabledEl) autorunEnabledEl.checked = autorun.enabled;
+  if (autorunTimeEl) autorunTimeEl.value = `${autorun.time}h`;
+  autorunDaysEl?.querySelectorAll('.autorun-day').forEach((button) => {
+    const day = Number(button.dataset.day);
+    button.setAttribute('aria-pressed', autorun.days.includes(day) ? 'true' : 'false');
+  });
+  autorunCardEl?.classList.add('is-ready');
+  loadingAutorun = false;
+}
+
+async function saveAutorunSettings() {
+  if (loadingAutorun) return;
+  const next = withDefaultSettings(optionsSettings);
+  next.enabled = toggle.checked === true;
+  next.autorun = normalizeAutorunSettings({
+    enabled: autorunEnabledEl?.checked === true,
+    time: autorunTimeEl?.value || DEFAULT_SETTINGS.autorun.time,
+    days: getSelectedAutorunDays()
+  });
+  optionsSettings = next;
+  const response = await sendRuntimeMessage({ action: 'SAVE_RABITOOL_SETTINGS', settings: next });
+  if (!response?.ok) {
+    setOptionsPopupStatus('Nao foi possivel salvar a execucao automatica.', 'error');
+  }
 }
 
 function optionNoticeIcon(level) {
@@ -430,6 +500,8 @@ async function saveEnabled(enabled) {
 function loadEnabled() {
   chrome.storage.local.get(['enabled', SETTINGS_KEY], (data) => {
     const settings = withDefaultSettings(data?.[SETTINGS_KEY]);
+    optionsSettings = settings;
+    renderAutorunSettings(settings);
     const enabled = data.enabled === true && settings.enabled !== false;
     toggle.checked = enabled;
     setOptionsPopupVisible(enabled);
@@ -441,6 +513,24 @@ function loadEnabled() {
 }
 
 toggle.addEventListener('change', () => saveEnabled(toggle.checked));
+autorunEnabledEl?.addEventListener('change', saveAutorunSettings);
+autorunTimeEl?.addEventListener('input', () => {
+  const formatted = formatAutorunTimeInput(autorunTimeEl.value);
+  if (autorunTimeEl.value !== formatted) autorunTimeEl.value = formatted;
+});
+autorunTimeEl?.addEventListener('change', saveAutorunSettings);
+autorunTimeEl?.addEventListener('blur', () => {
+  const normalized = normalizeAutorunSettings({ time: autorunTimeEl.value }).time;
+  autorunTimeEl.value = `${normalized}h`;
+  saveAutorunSettings();
+});
+autorunDaysEl?.addEventListener('click', (event) => {
+  const button = event.target.closest('.autorun-day');
+  if (!button) return;
+  const pressed = button.getAttribute('aria-pressed') === 'true';
+  button.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+  saveAutorunSettings();
+});
 shortcutListEl?.addEventListener('click', (event) => {
   const shortcutButton = event.target.closest('.sc-key-btn');
   if (!shortcutButton) return;
@@ -452,6 +542,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.enabled) {
     toggle.checked = changes.enabled.newValue === true;
     setOptionsPopupVisible(changes.enabled.newValue === true);
+  }
+  if (changes[SETTINGS_KEY]) {
+    optionsSettings = withDefaultSettings(changes[SETTINGS_KEY].newValue);
+    renderAutorunSettings(optionsSettings);
   }
   if (changes[WORKFLOW_STATUS_KEY]) renderOptionsWorkflowStatus(changes[WORKFLOW_STATUS_KEY].newValue || null);
 });

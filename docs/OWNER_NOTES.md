@@ -14,7 +14,8 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 
 - Popup: compact white top-right surface with drag, gear, close, outline `HugMe`/`Planilha` tracked-tab buttons, `RA > BI`, loading/current-process line, and stacked warning/result notices.
 - HugMe/Planilha buttons use green/check for ready, blue/spinner for checking, and red/X for blocked/login/permisson states.
-- Options: compact page with enable toggle/header, shortcut row, and popup preview only.
+- Options: compact page with enable toggle/header, shortcut row, auto-run controls, and popup preview.
+- Options also includes `Execucao Automatica`: off-by-default `Auto Run RA>BI`, local 24-hour time displayed as `16:00h`, and day buttons `D S T Q Q S S` defaulting to Monday-Friday.
 - Shortcut row: Chrome activation shortcut opens Chrome's shortcut page and refreshes the displayed key boxes after editing.
 - Version: scaffolded but hidden until a remote/release source exists.
 - Support: placeholders only; configure later.
@@ -49,6 +50,8 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 - Before writing, the tool checks that the active Excel worksheet is the configured destination, currently `Relatorio de Tickets`; if not, it blocks before search/paste. It then searches the oldest report ID, confirms the selected cell, pastes there, and does not press Enter after paste.
 - Future Excel Web writing should prefer a single contiguous paste action, so the owner can use one `Ctrl+Z` in Excel Web to revert the extension's write during review/testing.
 - The extension should avoid using arbitrary existing RA/Excel tabs. Excel Web paste currently requires focusing the reserved Planilha tab; the popup should keep this step explicit rather than silently stealing view.
+- Auto-run is independent from manual popup visibility. If enabled, it runs from a Chrome alarm at the configured local time/day, enables RaBiTool status/popup for the run, opens/prepares reserved tabs, and uses the same `RA > BI` workflow. Missed times are skipped, not caught up later.
+- RA > BI is one-run-at-a-time. A second manual click or an auto-run firing while another run is active should be skipped, not queued and not allowed to interrupt the active run.
 
 ## Popup Direction
 
@@ -77,7 +80,8 @@ After the owner tests the guarded Planilha flow, continue with refinement of the
 - `git config user.email` must match `.git-identity`.
 - `git config core.hooksPath` must be `.githooks`.
 - Initial branch: `main`.
-- Remote setup: later.
+- Remote setup: next planned work. Owner will align GitHub remote creation/setup, GitHub Releases, and the exact `remoterelease` behavior.
+- Future release direction: when owner asks for `remoterelease`, package/upload the local release artifact to GitHub Releases according to the owner-approved flow. Do not invent this before alignment.
 - Support placeholders: later.
 
 ## Details Still Needed
@@ -85,6 +89,7 @@ After the owner tests the guarded Planilha flow, continue with refinement of the
 - Whether to implement append-only fallback when the oldest incoming report ID is not found.
 - Whether to add post-paste validation beyond the current anchor guard.
 - Whether to narrow permissions from discovery-wide host access to only HugMe/Excel hosts.
+- Exact GitHub remote/release naming, tag/version rules, release asset naming, and config-page version-check/download behavior.
 
 ## Owner Commands
 
@@ -99,3 +104,7 @@ Ask for `gitcheck` when the AI should do `memcheck` and then save the project to
 localrelease
 
 Ask for `localrelease` when the AI should refresh the generated release folder from `project/`. The command should run `scripts/Export-LocalRelease.ps1` and should not create a zip unless a zip is explicitly requested.
+
+remoterelease
+
+Future command, not implemented/aligned yet. Owner intends it to publish the packaged extension artifact to GitHub Releases after remote setup, and later support a config-page version/download section.

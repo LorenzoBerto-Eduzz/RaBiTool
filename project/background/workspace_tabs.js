@@ -361,6 +361,9 @@ async function inspectWorkspaceTabStatus(kind, tab, wasTracked = false) {
   }
 
   if (kind === 'ra' && isWorkspaceTargetUrl(kind, url)) {
+    if (inspection.login) {
+      return { kind, label: def.label, state: 'error', tabId: tab.id, reason: 'HugMe esta na tela de login.' };
+    }
     return {
       kind,
       label: def.label,

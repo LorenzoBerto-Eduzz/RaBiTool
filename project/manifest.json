@@ -3,7 +3,7 @@
   "name": "RaBiTool",
   "version": "0.1.0",
   "description": "Browser automation helper for moving Reclame Aqui XLSX exports into an Excel BI sheet.",
-  "permissions": ["storage", "tabs", "tabGroups", "scripting", "commands", "downloads", "offscreen", "clipboardWrite", "clipboardRead", "debugger"],
+  "permissions": ["storage", "tabs", "tabGroups", "scripting", "commands", "downloads", "alarms", "offscreen", "clipboardWrite", "clipboardRead", "debugger"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [

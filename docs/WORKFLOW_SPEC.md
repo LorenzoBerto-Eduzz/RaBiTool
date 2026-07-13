@@ -97,6 +97,18 @@ For the current implementation phase, RaBiTool owns reserved RA and mother-sheet
 - The background should continuously listen to tracked tab URL/status changes. When login/auth is detected, mark the tab blocked; after login resolves away from auth but not on the target page, automatically navigate that same tracked tab back to the exact target URL.
 - The floating popup cannot appear on Chrome internal pages such as the default new tab / `chrome://newtab`, because Chrome does not allow extension content scripts there.
 
+## Scheduled Auto Run
+
+- The options page has an `Execucao Automatica` section.
+- Auto-run is off by default.
+- Default auto-run time is `16:00` in the user's local device time, shown as a plain 24-hour `HH:mmh` value.
+- The user selects active weekdays with seven buttons labeled `D S T Q Q S S`; Monday-Friday are selected by default.
+- The background uses Chrome alarms to schedule the next selected local day/time as a one-shot alarm, then reschedules after each alarm fires or settings change.
+- If Chrome/laptop is closed, asleep, or wakes too late for the configured time, the run is skipped rather than executed later as a catch-up.
+- When the scheduled run fires on time, it enables/shows RaBiTool status, prepares the reserved tabs, waits for readiness, and runs the same guarded `RA > BI` workflow as the manual button.
+- Only one RA > BI workflow may run at a time. If the user clicks `RA > BI` while another run is active, or an auto-run alarm fires during a manual run, the second request is skipped and the first run continues.
+- The Excel Web paste phase still focuses the Planilha tab because current UI-based find/copy/paste cannot safely run in the background.
+
 ## Business Safety Principles
 
 - Fail closed. If the tool cannot prove that headers, IDs, dates, target columns, or target range are correct, it must stop.
@@ -241,6 +253,7 @@ Before heavy development, align in this order:
 - The `RA > BI` button should work from the normal content-script popup and from the options-page popup preview.
 - `HugMe`/`Planilha` status buttons show spinner/check/X and focus the tracked tab when clicked.
 - The popup defaults to the top-right corner and remains draggable. Browser resize/zoom should not save a new popup position.
+- Future config-page release/version section is planned after GitHub remote/release setup. Intended direction: check the latest GitHub Release/version and provide a click action to download the release asset.
 
 ## Known Risks
 

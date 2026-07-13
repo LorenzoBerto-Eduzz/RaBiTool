@@ -31,8 +31,13 @@ function sendToTab(tabId, message, callback) {
   });
 }
 
-chrome.runtime.onInstalled.addListener(handleInstalled);
-chrome.runtime.onStartup?.addListener(setStartupDisabled);
+chrome.runtime.onInstalled.addListener((details) => {
+  handleInstalled(details, () => syncAutoRunAlarm());
+});
+chrome.runtime.onStartup?.addListener(() => {
+  setStartupDisabled(() => syncAutoRunAlarm());
+});
+chrome.alarms?.onAlarm?.addListener(handleAutoRunAlarm);
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   handleWorkspaceTabUpdated(tabId, changeInfo, tab);
 });
@@ -123,6 +128,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.action === 'SAVE_RABITOOL_SETTINGS') {
     const settings = withDefaultSettings(message.settings);
     chrome.storage.local.set({ enabled: settings.enabled !== false, [SETTINGS_KEY]: settings }, () => {
+      syncAutoRunAlarm(settings);
       sendResponse({ ok: !chrome.runtime.lastError });
     });
     return true;

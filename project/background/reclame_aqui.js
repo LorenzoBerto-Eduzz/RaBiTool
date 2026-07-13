@@ -87,6 +87,38 @@ async function waitForReservedWorkflowTabs(settings, timeoutMs = 30000) {
   };
 }
 
+async function waitForWorkspaceReadyOrBlocked(timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus = null;
+
+  while (Date.now() < deadline) {
+    lastStatus = await getWorkspaceStatus();
+    const items = [lastStatus?.ra, lastStatus?.bi].filter(Boolean);
+    const blocked = items.filter((item) => item.state === 'error');
+    if (blocked.length) {
+      return {
+        ok: false,
+        stage: 'tabs',
+        reason: blocked.map((item) => `${item.label}: ${item.reason}`).join(' | ')
+      };
+    }
+    if (items.length === 2 && items.every((item) => item.state === 'ready')) {
+      return { ok: true, stage: 'tabs-ready', status: lastStatus };
+    }
+    await delay(500);
+  }
+
+  const reasons = [lastStatus?.ra, lastStatus?.bi]
+    .filter(Boolean)
+    .map((item) => `${item.label}: ${item.reason || item.state}`)
+    .join(' | ');
+  return {
+    ok: false,
+    stage: 'tabs',
+    reason: reasons || 'Abas reservadas do HugMe e Planilha Mae nao ficaram prontas.'
+  };
+}
+
 async function waitForMatchingDownload(title, clickedAtMs, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   const normalizedTitle = String(title || '').toLowerCase();
@@ -497,6 +529,10 @@ async function prepareReclameAquiExport() {
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Aguardando HugMe carregar...' });
   await waitForTabComplete(tabs.raTab.id, 15000);
+
+  await setRaBiWorkflowStatus({ running: true, activeText: 'Validando abas preparadas...' });
+  const readiness = await waitForWorkspaceReadyOrBlocked();
+  if (!readiness.ok) return readiness;
 
   const now = new Date();
   const lookbackDays = 45;

@@ -6,6 +6,7 @@ function mergeShortcuts(rawShortcuts = {}) {
 function withDefaultSettings(raw = {}) {
   const merged = { ...DEFAULT_SETTINGS, ...(raw || {}) };
   merged.workflow = { ...DEFAULT_SETTINGS.workflow, ...(raw?.workflow || {}) };
+  merged.autorun = normalizeAutorunSettings(raw?.autorun);
   merged.shortcuts = mergeShortcuts(raw?.shortcuts);
   return merged;
 }
@@ -27,7 +28,7 @@ function setStartupDisabled(callback) {
   });
 }
 
-function handleInstalled(details = {}) {
+function handleInstalled(details = {}, callback) {
   setStartupDisabled(() => {
     if (details.reason === 'install' || details.reason === 'update') {
       chrome.storage.local.set({ [WORKSPACE_REFRESH_MARK_KEY]: new Date().toISOString() });
@@ -35,5 +36,6 @@ function handleInstalled(details = {}) {
     if (details.reason === 'install' || details.reason === 'update') {
       chrome.runtime.openOptionsPage();
     }
+    callback?.();
   });
 }

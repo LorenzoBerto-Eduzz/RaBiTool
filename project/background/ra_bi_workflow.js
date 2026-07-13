@@ -6,6 +6,8 @@ const RABITOOL_ACTIONS = {
   PREPARE_EXCEL_IMPORT: 'RABITOOL_PREPARE_EXCEL_IMPORT'
 };
 
+let raBiWorkflowLock = null;
+
 function normalizeWorkflowNotice(notice) {
   if (!notice) return null;
   const text = String(notice.text || notice.reason || notice.message || '').trim();
@@ -85,24 +87,50 @@ async function finishRaBiWorkflow(result) {
   });
 }
 
-async function startRaToExcelWorkflow() {
-  await beginRaBiWorkflow('Verificando abas...');
+function workflowAlreadyRunningResult() {
+  return {
+    ok: false,
+    skipped: true,
+    stage: 'workflow-lock',
+    reason: 'RA > BI ja esta em execucao.'
+  };
+}
+
+async function runExclusiveRaBiWorkflow(activeText, worker) {
+  if (raBiWorkflowLock) {
+    const result = workflowAlreadyRunningResult();
+    await setRaBiWorkflowStatus({
+      running: true,
+      notices: [{
+        level: 'warn',
+        stage: result.stage,
+        text: result.reason
+      }]
+    });
+    return result;
+  }
+
+  raBiWorkflowLock = { startedAt: new Date().toISOString() };
   try {
-    const result = await prepareReclameAquiExport();
+    await beginRaBiWorkflow(activeText);
+    const result = await worker();
     await finishRaBiWorkflow(result);
     return result;
   } catch (error) {
     const result = { ok: false, stage: 'workflow', reason: error?.message || String(error) || 'Erro inesperado no workflow.' };
     await finishRaBiWorkflow(result);
     return result;
+  } finally {
+    raBiWorkflowLock = null;
   }
 }
 
+async function startRaToExcelWorkflow() {
+  return runExclusiveRaBiWorkflow('Verificando abas...', prepareReclameAquiExport);
+}
+
 async function prepareRaExportWorkflow() {
-  await beginRaBiWorkflow('Preparando para gerar relat\u00f3rio...');
-  const result = await prepareReclameAquiExport();
-  await finishRaBiWorkflow(result);
-  return result;
+  return runExclusiveRaBiWorkflow('Preparando para gerar relat\u00f3rio...', prepareReclameAquiExport);
 }
 
 async function checkRaDownloadWorkflow() {
