@@ -60,7 +60,7 @@ The popup is compact and fixed-position:
 
 The tracked-tab buttons are outline-only: green/check means ready, blue/spinner means checking/loading, and red/X means blocked or login/permisson needed. The `RA > BI` button calls the RA export/download/parser and guarded Excel Web keyboard paste workflow. The temporary `Test Paste` button/action and local test XLSX were removed from dev and release builds. The default placement is top-right; dragging saves the position, while browser resize/zoom should only keep the popup visible and should not save a new position.
 
-Every visible notice/log row is clickable and has a deterministic debug code generated from severity, stage, message text, and available diagnostic seed. The code is not shown in the popup UI. Final workflow notices are normalized in `background/ra_bi_workflow.js` with `stage`, `at`, compact `diagnostic` details, and `code`; clicking a notice copies the readable message plus stage/time/details/code, which is the support path for colleague testing reports.
+Every visible notice/log row is clickable and has a deterministic debug code generated from severity, stage, and message text. The code is not shown in the popup UI. Clicking a notice copies only the readable message plus `Código: ...`, keeping colleague reports compact while still giving Codex a precise tag to identify the failing stage.
 
 ## Workspace Tabs
 
@@ -109,7 +109,7 @@ This project intentionally uses browser UI automation instead of API integration
 - prefer explicit owner-confirmed button labels/selectors;
 - use clipboard/import only where Chrome and Excel Web allow it reliably.
 - for the current Excel Web write path, explicitly focus the Excel tab before keyboard/debugger actions and clearly show that step in popup status text.
-- for Excel Find, treat `Ctrl+F` as a requested action rather than proof of readiness: bring the page forward, refocus the workbook surface, detect both explicit Excel grid selectors and broad visible workbook-like surfaces in the top document and accessible frames, vary click points inside the target surface, try multiple Ctrl+F delivery variants if needed, confirm the Find input appears, confirm the searched ID was written into it, and confirm the selected cell copies back as that same ID before pasting. The current guard retries Find opening and selected-cell confirmation with increasing waits for slower machines, logs focus/candidate/frame evidence if Find cannot open, and should not reopen Find when the selected anchor is already proven correct.
+- for Excel Find, treat the shortcut as a requested action rather than proof of readiness: bring the page forward, refocus the workbook surface, detect both explicit Excel grid selectors and broad visible workbook-like surfaces in the top document and accessible frames, vary click points inside the target surface, choose the Find shortcut order from locale signals (`Ctrl+F` first for English/no-PT UI, `Ctrl+L` first for PT-BR/`Localizar` UI), confirm the Find input appears, confirm the searched ID was written into it, and confirm the selected cell copies back as that same ID before pasting. The current guard retries Find opening and selected-cell confirmation with increasing waits for slower machines, logs focus/candidate/frame evidence if Find cannot open, and should not reopen Find when the selected anchor is already proven correct.
 
 ## Local Release Exports
 

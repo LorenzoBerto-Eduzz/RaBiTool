@@ -152,6 +152,17 @@ function normalizeExcelIdValue(value) {
 const EXCEL_FIND_ATTEMPT_WAITS_MS = [500, 1000, 1500, 2000, 2500, 3000];
 const EXCEL_SELECTED_CELL_VERIFY_WAITS_MS = [250, 500, 750, 1000, 1500, 2000];
 
+function excelFindShortcutSpec(key) {
+  const normalized = String(key || 'f').toLowerCase() === 'l' ? 'l' : 'f';
+  const upper = normalized.toUpperCase();
+  return {
+    key: normalized,
+    code: `Key${upper}`,
+    windowsVirtualKeyCode: upper.charCodeAt(0),
+    label: `ctrl-${normalized}`
+  };
+}
+
 async function copySelectedExcelText(target, stage, options = {}) {
   const attempts = Math.max(1, Number(options.attempts || 1));
   const baseWaitMs = Math.max(0, Number(options.baseWaitMs || 350));
@@ -490,16 +501,20 @@ async function focusExcelWorkbookSurface(target, options = {}) {
   return focused;
 }
 
-function dispatchExcelFindShortcutInPage() {
+function dispatchExcelFindShortcutInPage(keyName = 'f') {
+  const key = String(keyName || 'f').toLowerCase() === 'l' ? 'l' : 'f';
+  const upper = key.toUpperCase();
+  const code = `Key${upper}`;
+  const keyCode = upper.charCodeAt(0);
   const target = document.activeElement || document.body || document.documentElement || document;
   const eventInit = {
     bubbles: true,
     cancelable: true,
     composed: true,
-    key: 'f',
-    code: 'KeyF',
-    keyCode: 70,
-    which: 70,
+    key,
+    code,
+    keyCode,
+    which: keyCode,
     ctrlKey: true
   };
   ['keydown', 'keypress', 'keyup'].forEach((type) => {
@@ -508,10 +523,61 @@ function dispatchExcelFindShortcutInPage() {
   return {
     ok: true,
     stage: 'excel-find-shortcut',
+    shortcut: `Ctrl+${upper}`,
     documentFocused: document.hasFocus(),
     activeElement: document.activeElement?.tagName || '',
     activeRole: document.activeElement?.getAttribute?.('role') || '',
     activeAriaLabel: document.activeElement?.getAttribute?.('aria-label') || ''
+  };
+}
+
+function detectExcelFindShortcutLocaleInPage() {
+  function textFor(element) {
+    if (!element) return '';
+    return [
+      element.id,
+      element.getAttribute?.('name'),
+      element.getAttribute?.('data-unique-id'),
+      element.getAttribute?.('aria-label'),
+      element.getAttribute?.('label'),
+      element.textContent
+    ].map((value) => String(value || '').trim()).filter(Boolean).join(' ').slice(0, 500);
+  }
+
+  const sampledText = Array.from(document.querySelectorAll('#FindAndSelect,[data-unique-id="Ribbon-FindAndSelect"],[data-unique-id="Ribbon-Find"],button[name="Find"],[role="button"],[role="menuitem"]'))
+    .slice(0, 30)
+    .map(textFor)
+    .filter(Boolean)
+    .join(' ');
+  const signals = [
+    navigator.language || '',
+    document.documentElement?.lang || '',
+    sampledText
+  ].join(' ').toLowerCase();
+  const prefersCtrlL = /\bpt\b|pt-br|portugu[eê]s|localizar|selecionar|substituir|planilha/.test(signals);
+  return {
+    ok: true,
+    prefersCtrlL,
+    language: navigator.language || '',
+    documentLanguage: document.documentElement?.lang || ''
+  };
+}
+
+async function detectExcelFindShortcutOrder(target) {
+  const probes = [];
+  const direct = await runFunctionInTab(target.tabId, detectExcelFindShortcutLocaleInPage, []);
+  if (direct?.ok) probes.push({ source: 'top', ...direct });
+
+  const frames = await runFunctionInTabFrames(target.tabId, detectExcelFindShortcutLocaleInPage, []);
+  (frames?.results || []).forEach((item) => {
+    if (item.result?.ok) probes.push({ source: `frame:${item.frameId}`, ...item.result });
+  });
+
+  const portuguese = probes.find((probe) => probe.prefersCtrlL);
+  const order = portuguese ? ['l', 'f'] : ['f', 'l'];
+  return {
+    order,
+    reason: portuguese ? `sinais PT-BR em ${portuguese.source}` : 'sem sinal PT-BR'
   };
 }
 
@@ -697,9 +763,9 @@ async function fillExcelFindDialog(target, id, stage, submit = false) {
   };
 }
 
-async function dispatchSyntheticExcelFindShortcut(target) {
-  const direct = await runFunctionInTab(target.tabId, dispatchExcelFindShortcutInPage, []);
-  const frames = await runFunctionInTabFrames(target.tabId, dispatchExcelFindShortcutInPage, []);
+async function dispatchSyntheticExcelFindShortcut(target, key = 'f') {
+  const direct = await runFunctionInTab(target.tabId, dispatchExcelFindShortcutInPage, [key]);
+  const frames = await runFunctionInTabFrames(target.tabId, dispatchExcelFindShortcutInPage, [key]);
   return {
     ok: !!direct?.ok || !!frames?.ok,
     direct,
@@ -709,24 +775,28 @@ async function dispatchSyntheticExcelFindShortcut(target) {
 }
 
 async function tryOpenExcelFindDialog(target, stage, waitMs, attempt) {
-  const variants = [
-    {
-      name: 'debugger-raw-ctrl-f',
-      run: () => dispatchDebuggerCtrlShortcut(target, 'f', 'KeyF', 70)
-    },
-    {
-      name: 'debugger-keydown-ctrl-f',
-      run: () => dispatchDebuggerCtrlShortcutKeyDown(target, 'f', 'KeyF', 70)
-    },
-    {
-      name: 'debugger-modified-key-f',
-      run: () => dispatchDebuggerKey(target, 'f', 'KeyF', 70, { ctrl: true, holdMs: 100 })
-    },
-    {
-      name: 'dom-synthetic-ctrl-f',
-      run: () => dispatchSyntheticExcelFindShortcut(target)
-    }
-  ];
+  const shortcutDetection = await detectExcelFindShortcutOrder(target);
+  const variants = shortcutDetection.order.flatMap((key) => {
+    const shortcut = excelFindShortcutSpec(key);
+    return [
+      {
+        name: `debugger-raw-${shortcut.label}`,
+        run: () => dispatchDebuggerCtrlShortcut(target, shortcut.key, shortcut.code, shortcut.windowsVirtualKeyCode)
+      },
+      {
+        name: `debugger-keydown-${shortcut.label}`,
+        run: () => dispatchDebuggerCtrlShortcutKeyDown(target, shortcut.key, shortcut.code, shortcut.windowsVirtualKeyCode)
+      },
+      {
+        name: `debugger-modified-${shortcut.label}`,
+        run: () => dispatchDebuggerKey(target, shortcut.key, shortcut.code, shortcut.windowsVirtualKeyCode, { ctrl: true, holdMs: 100 })
+      },
+      {
+        name: `dom-synthetic-${shortcut.label}`,
+        run: () => dispatchSyntheticExcelFindShortcut(target, shortcut.key)
+      }
+    ];
+  });
   let lastReason = '';
   let lastFocus = null;
 
@@ -760,6 +830,7 @@ async function tryOpenExcelFindDialog(target, stage, waitMs, attempt) {
         ...opened,
         openVariant: variant.name,
         openAttempt: attempt,
+        shortcutOrder: shortcutDetection.order,
         focus
       };
     }
@@ -775,7 +846,7 @@ async function tryOpenExcelFindDialog(target, stage, waitMs, attempt) {
   return {
     ok: false,
     stage,
-    reason: `Tentativa ${attempt}: não consegui abrir/confirmar o Find do Excel após variantes de teclado. ${lastReason} ${focusEvidence}`.trim()
+    reason: `Tentativa ${attempt}: não consegui abrir/confirmar o Find do Excel após variantes de teclado. Atalhos=${shortcutDetection.order.map((key) => `Ctrl+${key.toUpperCase()}`).join('>')} (${shortcutDetection.reason}). ${lastReason} ${focusEvidence}`.trim()
   };
 }
 

@@ -337,22 +337,8 @@ function optionNoticeDebugCode(item, scope = 'options') {
   return `RBT-${level}-${stage}-${optionNoticeHash(`${level}|${stage}|${text}`)}`;
 }
 
-function formatOptionsCopyDiagnostic(diagnostic) {
-  if (!diagnostic) return '';
-  if (typeof diagnostic === 'string') return diagnostic.trim();
-  try {
-    return JSON.stringify(diagnostic);
-  } catch (_) {
-    return String(diagnostic || '').trim();
-  }
-}
-
 async function copyOptionsLogText(text, code, item = {}) {
   const parts = [String(text || '').trim()];
-  if (item.stage) parts.push(`Etapa: ${item.stage}`);
-  if (item.at) parts.push(`Hor\u00e1rio: ${item.at}`);
-  const diagnostic = formatOptionsCopyDiagnostic(item.diagnostic);
-  if (diagnostic) parts.push(`Detalhes: ${diagnostic}`);
   parts.push(`C\u00f3digo: ${code}`);
   const value = parts.filter(Boolean).join(' | ');
   try {
@@ -414,7 +400,7 @@ function setOptionsPopupNotices(notices = []) {
       row.className = 'csh-status-item';
       row.dataset.level = item.level || 'info';
       row.dataset.code = item.code || '';
-      row.title = 'Clique para copiar o diagnóstico';
+      row.title = 'Clique para copiar o log';
       const icon = document.createElement('span');
       icon.className = 'csh-status-icon';
       icon.textContent = optionNoticeIcon(item.level);

@@ -243,22 +243,8 @@
     return `RBT-${level}-${stage}-${noticeHash(`${level}|${stage}|${text}`)}`;
   }
 
-  function formatCopyDiagnostic(diagnostic) {
-    if (!diagnostic) return '';
-    if (typeof diagnostic === 'string') return diagnostic.trim();
-    try {
-      return JSON.stringify(diagnostic);
-    } catch (_) {
-      return String(diagnostic || '').trim();
-    }
-  }
-
   async function copyLogText(text, code, item = {}) {
     const parts = [String(text || '').trim()];
-    if (item.stage) parts.push(`Etapa: ${item.stage}`);
-    if (item.at) parts.push(`Hor\u00e1rio: ${item.at}`);
-    const diagnostic = formatCopyDiagnostic(item.diagnostic);
-    if (diagnostic) parts.push(`Detalhes: ${diagnostic}`);
     parts.push(`C\u00f3digo: ${code}`);
     const value = parts.filter(Boolean).join(' | ');
     try {
@@ -320,7 +306,7 @@
         row.className = 'csh-status-item';
         row.dataset.level = item.level || 'info';
         row.dataset.code = item.code || '';
-        row.title = 'Clique para copiar o diagnóstico';
+        row.title = 'Clique para copiar o log';
         const icon = document.createElement('span');
         icon.className = 'csh-status-icon';
         icon.textContent = noticeIcon(item.level);
