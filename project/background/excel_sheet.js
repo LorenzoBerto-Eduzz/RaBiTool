@@ -919,6 +919,80 @@ async function findExcelMotherSheetTabForSettings(settings) {
   return tabs.find((tab) => isExcelMotherSheetTab(tab, settings)) || null;
 }
 
+async function ensureExcelTabOnTarget(excelTab, settings, attempts = 3) {
+  const targetUrl = String(settings?.excelWorkbookUrl || '').trim();
+  let lastTab = excelTab || null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    lastTab = await getTab(lastTab?.id);
+    if (!lastTab) {
+      return {
+        ok: false,
+        stage: 'excel-tab',
+        reason: 'A aba rastreada da Planilha foi fechada antes da colagem.'
+      };
+    }
+
+    await focusWindow(lastTab.windowId);
+    await activateTab(lastTab.id);
+    await delay(350);
+
+    lastTab = await getTab(lastTab.id) || lastTab;
+    if (isExcelMotherSheetTab(lastTab, settings)) {
+      return { ok: true, tab: lastTab, attempts: attempt };
+    }
+
+    if (targetUrl) {
+      await updateTab(lastTab.id, { url: targetUrl });
+      await waitForTabComplete(lastTab.id, 10000);
+    }
+    await delay(1000);
+  }
+
+  const finalTab = lastTab?.id ? await getTab(lastTab.id) : lastTab;
+  return {
+    ok: false,
+    stage: 'excel-tab',
+    reason: `Não consegui recolocar a aba da Planilha no arquivo alvo do Excel Web após ${attempts} tentativas. URL atual: ${finalTab?.url || 'indisponível'}`
+  };
+}
+
+async function attachDebuggerToExcelTab(excelTab, settings, attempts = 3) {
+  let lastReason = '';
+  let lastTab = excelTab;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const prepared = await ensureExcelTabOnTarget(lastTab, settings, 3);
+    if (!prepared.ok) return prepared;
+    lastTab = prepared.tab;
+
+    const target = { tabId: lastTab.id };
+    const attached = await debuggerAttach(target);
+    if (attached.ok) {
+      return { ok: true, stage: 'excel-debugger', target, tab: lastTab, attempts: attempt };
+    }
+
+    lastReason = attached.reason || 'motivo não informado';
+    const lower = lastReason.toLowerCase();
+    const anotherDebugger = lower.includes('another debugger') || lower.includes('debugger is already attached');
+    if (anotherDebugger) {
+      return {
+        ok: false,
+        stage: 'excel-debugger',
+        reason: 'Outra extensão ou o DevTools do Chrome já está controlando a aba da Planilha. Feche a gravação/inspeção nessa aba e rode RA > BI novamente.'
+      };
+    }
+
+    await delay(1000);
+  }
+
+  return {
+    ok: false,
+    stage: 'excel-debugger',
+    reason: `Não consegui anexar o Chrome Debugger na aba da Planilha após ${attempts} tentativas: ${lastReason}`
+  };
+}
+
 async function applyExcelWorkbookUpdate(preferredExcelTabId = null) {
   const settings = await getStoredSettings();
   let cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
@@ -944,10 +1018,12 @@ async function applyExcelWorkbookUpdate(preferredExcelTabId = null) {
       reason: 'Aba da Planilha Mãe no Excel Web não encontrada.'
     };
   }
+  const preparedExcelTab = await ensureExcelTabOnTarget(excelTab, settings, 3);
+  if (!preparedExcelTab.ok) return preparedExcelTab;
   cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
   if (cancelled) return cancelled;
 
-  return applyExcelWorkbookUpdateViaKeyboard(excelTab, report, null);
+  return applyExcelWorkbookUpdateViaKeyboard(preparedExcelTab.tab, report, null);
 }
 
 async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null) {
@@ -967,13 +1043,18 @@ async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null
   if (cancelled) return cancelled;
 
   await setRaBiWorkflowStatus({ running: true, activeText: 'Confirmando aba Relatório de Tickets...' });
+  const preparedExcelTab = await ensureExcelTabOnTarget(excelTab, settings, 3);
+  if (!preparedExcelTab.ok) return preparedExcelTab;
+  excelTab = preparedExcelTab.tab;
   const worksheet = await verifyExcelWorksheetReady(excelTab.id, settings);
   if (!worksheet.ok) return worksheet;
   cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
   if (cancelled) return cancelled;
 
-  const target = { tabId: excelTab.id };
-  const attached = await debuggerAttach(target);
+  const attached = await attachDebuggerToExcelTab(excelTab, settings, 3);
+  if (!attached.ok) return attached;
+  excelTab = attached.tab;
+  const target = attached.target;
   if (!attached.ok) {
     return {
       ok: false,
