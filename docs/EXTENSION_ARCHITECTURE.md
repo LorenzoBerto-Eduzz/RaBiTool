@@ -118,6 +118,6 @@ This project intentionally uses browser UI automation instead of API integration
 
 `scripts/Export-LocalRelease.ps1` creates the generated local release folder at the repo root. Do not run it unless the owner explicitly asks for a local release/export. Zip files should only be created when the owner explicitly asks for a zip.
 
-## Future Remote Releases
+## Remote Releases
 
-GitHub remote setup and GitHub Releases are the next planned alignment. A future `remoterelease` workflow should only be implemented after the owner provides exact repo/tag/version/asset rules. Intended direction: upload the packaged extension artifact to GitHub Releases, then add an options-page release/version section that checks the latest release and lets users download it.
+GitHub remote is configured. `remoterelease` should only run when the owner explicitly asks for it. It should upload the zipped local release artifact to GitHub Releases for the current manifest version. Do not bump/change versions or create/edit releases automatically. Future planned UI: add an options-page release/version section that checks the latest release and lets users download it.

@@ -13,9 +13,9 @@ This file is the portable continuity note for AI coding sessions working on RaBi
 - Build step: none.
 - Load unpacked from `project/`.
 - Git is initialized locally.
-- Initial branch should be `main`.
+- Initial branch is `main`.
 - First project baseline commit has been created locally.
-- No remote is configured yet; pushing is deferred until the owner adds/chooses a remote.
+- GitHub remote is `origin -> https://github.com/LorenzoBerto-Eduzz/RaBiTool.git`.
 - Support placeholders remain intentionally unconfigured for now.
 - Allowed Git email for this project: `lorenzo.berto@eduzz.com`.
 - Git identity guard is enabled locally with `.git-identity`, `git config user.email`, and `git config core.hooksPath .githooks`.
@@ -145,14 +145,12 @@ Keep this broad only while discovering. Before release, narrow host permissions 
 
 Current recommended next work:
 
-1. Set up the GitHub remote/repo and define the owner-approved push/release workflow.
-2. Define `remoterelease`: expected future command should create/update a GitHub Release and upload the local release zip/folder artifact there. Owner will provide exact instructions before implementation.
-3. Add a config-page release/version section after GitHub releases are defined. Intended behavior: check the current GitHub release/version and let the user click a button to download the newest release asset.
-4. Smoke test the colleague release on a second Chrome profile/machine.
-5. Refine Excel paste edge cases when Excel Find cannot locate the oldest incoming report ID.
-6. Decide whether append-only fallback should be implemented for clearly newer reports.
-7. Add post-paste validation if the owner wants an additional review guard.
-8. Eventually narrow `<all_urls>` permissions to the HugMe and Excel Web hosts once discovery stabilizes.
+1. Add a config-page release/version section after GitHub releases are in use. Intended behavior: check the current GitHub release/version and let the user click a button to download the newest release asset.
+2. Smoke test the colleague release on a second Chrome profile/machine.
+3. Refine Excel paste edge cases when Excel Find cannot locate the oldest incoming report ID.
+4. Decide whether append-only fallback should be implemented for clearly newer reports.
+5. Add post-paste validation if the owner wants an additional review guard.
+6. Eventually narrow `<all_urls>` permissions to the HugMe and Excel Web hosts once discovery stabilizes.
 
 ## First Commit Gate
 
@@ -168,6 +166,6 @@ Before any project commit:
 ## Owner Workflow Commands
 
 - `memcheck`: update durable project docs/meta memory only.
-- `gitcheck`: perform `memcheck`, inspect and check the repo, verify Git identity guard when present, then stage, commit, and push if a remote is configured unless the owner says not to.
+- `gitcheck`: perform `memcheck`, inspect and check the repo, verify Git identity guard when present, then stage, commit, and push if a remote is configured unless the owner says not to. Commit titles should start with the current extension version without brackets, for example `0.1.0 - Commit title`. Do not bump/change the extension version unless the owner explicitly asks for a version change.
 - `localrelease`: refresh the generated local release folder from `project/` using `scripts/Export-LocalRelease.ps1`. Do not create a zip unless explicitly requested.
-- Future/unaligned: `remoterelease` should be defined after GitHub remote setup. Expected direction is to package/upload the release artifact to GitHub Releases and support update/version discovery from the config page.
+- `remoterelease`: only when explicitly requested, create the zipped local release artifact and publish/upload it to GitHub Releases for the current extension version. Use the version name for the release tag/title/description and upload `RaBiTool.zip`. Do not create or edit GitHub Releases unless the owner explicitly asks for `remoterelease` or gives a direct release instruction.

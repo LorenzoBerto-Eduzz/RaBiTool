@@ -30,17 +30,25 @@ powershell -ExecutionPolicy Bypass -File scripts/Export-LocalRelease.ps1 -Zip
 4. Confirm no private data is included.
 5. Package the generated folder manually, or run the export script with `-Zip` only when a zip is explicitly wanted.
 
-## Future GitHub Release Flow
+## GitHub Release Flow
 
-Not implemented/aligned yet. The next project step is to set up the GitHub remote and agree on release rules.
+Owner command: `remoterelease`.
 
-Planned owner-facing command: `remoterelease`.
+Only run this when the owner explicitly asks for it.
 
-Expected direction, pending exact owner instructions:
+Rules:
 
-1. Create/update the local release artifact.
-2. Create a GitHub Release using the agreed tag/version.
-3. Upload the packaged extension artifact as a release asset.
-4. Later, add a config-page section that checks GitHub Releases for the newest version and provides a button to download the release asset.
+1. Use the current `project/manifest.json` version unless the owner explicitly asks to bump it first. Never change the manifest/code/docs version automatically.
+2. Refresh the local release export and create the zip artifact.
+3. Use GitHub tag/title/description based on the version name, for example `v0.1.0`.
+4. Upload the zipped local release artifact as `RaBiTool.zip`.
+5. Do not commit generated release folders or zip files to normal Git history.
+6. Do not create or edit GitHub Releases unless the owner explicitly asks for `remoterelease` or gives a direct release instruction.
 
-Do not invent release tags, asset names, or remote URLs before owner alignment.
+Current remote target:
+
+```text
+https://github.com/LorenzoBerto-Eduzz/RaBiTool.git
+```
+
+Future planned UI: add a config-page section that checks GitHub Releases for the newest version and provides a button to download the release asset.

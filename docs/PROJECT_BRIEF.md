@@ -53,7 +53,7 @@ The project should be developed as a reliable business-data workflow, not as a l
 - API/OAuth/Graph-based Excel writes. The current path is focused browser UI automation.
 - Parsing real customer XLSX exports committed to the repo.
 - API integrations with Reclame Aqui, Microsoft Graph, or other external services.
-- Public/GitHub release automation until the owner aligns the remote, release naming, tag/version rules, and release asset flow.
+- GitHub release publishing unless the owner explicitly asks for `remoterelease`.
 
 ## Constraints
 
@@ -67,10 +67,11 @@ The project should be developed as a reliable business-data workflow, not as a l
 - Keep one contiguous Excel paste as the write action whenever possible so Excel Web undo remains simple.
 - Treat Excel Web UI automation as focused-tab automation. Guard Excel Find by proving the Find dialog, searched ID, and selected anchor cell before pasting.
 - After validation guards pass, optimize for quick/automatic execution.
-- Next planned project direction is GitHub remote setup, a future `remoterelease` command for GitHub Releases, and a config-page version/download section.
+- Next planned project direction is using the GitHub remote/release flow and later adding a config-page version/download section.
 
 ## Owner Workflow Commands
 
 - `memcheck`: update durable docs/meta memory so future AIs, future sessions, and other devices can continue with the same understanding.
 - `gitcheck`: perform `memcheck`, inspect the worktree, run relevant checks, verify Git identity guard, stage, commit, and push when a remote is configured unless the owner says not to.
 - `localrelease`: refresh the generated release folder from `project/` using the local release script. It does not create a zip unless the owner explicitly asks for one.
+- `remoterelease`: only when explicitly requested, create the zipped local release artifact and publish/upload it to GitHub Releases for the current manifest version. Version bumps and GitHub release creation/editing are never automatic.

@@ -83,8 +83,10 @@ After the owner tests the guarded Planilha flow, continue with refinement of the
 - `git config user.email` must match `.git-identity`.
 - `git config core.hooksPath` must be `.githooks`.
 - Initial branch: `main`.
-- Remote setup: next planned work. Owner will align GitHub remote creation/setup, GitHub Releases, and the exact `remoterelease` behavior.
-- Future release direction: when owner asks for `remoterelease`, package/upload the local release artifact to GitHub Releases according to the owner-approved flow. Do not invent this before alignment.
+- Remote: `origin -> https://github.com/LorenzoBerto-Eduzz/RaBiTool.git`.
+- Commit message convention: start commit titles with the current extension version without brackets, for example `0.1.0 - Commit title`.
+- Version rule: do not bump/change `project/manifest.json` version, docs version references, commit version prefix, tags, or releases unless the owner explicitly asks for a version change.
+- Release direction: only when owner asks for `remoterelease`, package/upload the zipped local release artifact to GitHub Releases. Use the current manifest version for the release tag/title/description and upload `RaBiTool.zip`. Do not create or edit GitHub Releases without an explicit release instruction.
 - Support placeholders: later.
 
 ## Details Still Needed
@@ -110,4 +112,4 @@ Ask for `localrelease` when the AI should refresh the generated release folder f
 
 remoterelease
 
-Future command, not implemented/aligned yet. Owner intends it to publish the packaged extension artifact to GitHub Releases after remote setup, and later support a config-page version/download section.
+Ask for `remoterelease` when the AI should create the zipped local release artifact and publish/upload it to GitHub Releases for the current manifest version. Do not do this as part of ordinary `gitcheck`.

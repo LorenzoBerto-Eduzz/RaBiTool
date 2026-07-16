@@ -77,5 +77,6 @@ Do not copy `.git/` into future projects. A new extension project should initial
 
 - `memcheck`: thoroughly update durable project docs/meta memory so future AIs/devices can continue with the same understanding. Do not commit or push by default.
 - `gitcheck`: perform `memcheck`, then inspect, run relevant checks, stage, commit, and push to the configured remote unless the owner says not to.
-- `gitcheck` commit messages must have a concise title sentence followed by one or more `-` bullet points describing the completed changes.
+- `gitcheck` commit messages must start with the current extension version without brackets, for example `0.1.0 - Commit title`, followed by one or more `-` bullet points describing the completed changes. Do not bump/change the extension version unless the owner explicitly asks for a version change.
 - `localrelease`: refresh the generated release folder from `project/` using `scripts/Export-LocalRelease.ps1`. Do not create a zip unless the owner explicitly asks for a zip.
+- `remoterelease`: only when explicitly requested, create the zipped local release artifact and publish/upload it to GitHub Releases for the current extension version. Do not create or edit GitHub Releases unless the owner explicitly asks for `remoterelease` or gives a direct release instruction.

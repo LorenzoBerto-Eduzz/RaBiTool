@@ -20,6 +20,24 @@ Every extension created from this template should get its own Git repo and remot
 9. Configure the identity guard if desired.
 10. Make the first commit for that new project.
 
+## Current RaBiTool Remote
+
+This project uses:
+
+```text
+origin -> https://github.com/LorenzoBerto-Eduzz/RaBiTool.git
+```
+
+Commit messages for this project should begin with the current extension version without brackets, for example:
+
+```text
+0.1.0 - Update release workflow
+
+- Describe the completed change.
+```
+
+Do not change/bump the extension version in `project/manifest.json`, docs, commit convention, tags, or releases unless the owner explicitly asks for a version change.
+
 ## Git Identity Guard In New Projects
 
 The template includes `.git-identity.example` and `.githooks/`.
