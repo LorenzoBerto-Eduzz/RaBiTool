@@ -206,7 +206,7 @@ The current sequence is:
 3. Bring the page forward, refocus the workbook surface, use Excel Find, and confirm the Find dialog/input is visible and writable. The shortcut is locale-aware: English/no-PT UI tries `Ctrl+F` first, while PT-BR/`Localizar` UI tries `Ctrl+L` first, each with the other shortcut as fallback. Workbook focus should first prefer explicit grid/canvas/sheet selectors, then fall back to broad visible workbook-like regions and varied click points, checking both the top document and accessible frames. If Excel Web does not expose the Find dialog, retry with multiple keyboard delivery variants before failing closed.
 4. Paste/fill the oldest incoming report `Id HugMe`, confirm the Find field contains that ID, press Enter twice, and wait for Excel selection to settle.
 5. Close Find, copy the selected cell, and verify the selected value equals the expected oldest report ID.
-6. Retry the Find/anchor proof up to six increasingly patient attempts (`500ms` through `3000ms`) on slower machines. Each attempt may try multiple locale-aware Find shortcut delivery variants. Before repeating Find, first re-check whether the selected cell is already the expected anchor ID so a slow but successful search does not cause an unnecessary second Find cycle.
+6. Retry the Find/anchor proof up to six increasingly patient attempts on slower machines. Each attempt may try multiple locale-aware Find shortcut delivery variants, confirms the Find field contains the expected ID, executes the search with real debugger `Enter` keys, waits for Excel Web to settle, closes Find, and retries selected-cell copy verification with patient waits. Before repeating Find, first re-check whether the selected cell is already the expected anchor ID so a slow but successful search does not cause an unnecessary second Find cycle.
 7. Copy the prepared 9-column TSV and send one `Ctrl+V` on that anchor cell, without pressing Enter afterward, so Excel does not move the selection down after paste.
 
 Known limitation: this UI-based Excel phase needs focus because Excel Web's find, selection, copy, and paste behavior is tied to the active workbook surface and browser clipboard focus rules. A fully no-focus write would require a different integration path such as Microsoft Graph or another API, which the owner has explicitly not chosen for this project.
@@ -258,7 +258,7 @@ Before heavy development, align in this order:
 - The `RA > BI` button should work from the normal content-script popup and from the options-page popup preview.
 - `HugMe`/`Planilha` status buttons show spinner/check/X and focus the tracked tab when clicked.
 - The popup defaults to the top-right corner and remains draggable. Browser resize/zoom should not save a new popup position.
-- Future config-page release/version section is planned after GitHub remote/release setup. Intended direction: check the latest GitHub Release/version and provide a click action to download the release asset.
+- Config-page release/version section is active. It checks the latest GitHub Release/version for `LorenzoBerto-Eduzz/RaBiTool`, looks for `RaBiTool.zip`, compares it with the running manifest version, and provides a download action when a newer release asset exists.
 
 ## Known Risks
 

@@ -14,10 +14,11 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 
 - Popup: compact white top-right surface with drag, gear, close, outline `HugMe`/`Planilha` tracked-tab buttons, `RA > BI`, loading/current-process line, and stacked warning/result notices.
 - HugMe/Planilha buttons use green/check for ready, blue/spinner for checking, and red/X for blocked/login/permisson states.
-- Options: compact page with enable toggle/header, shortcut row, auto-run controls, and popup preview.
+- Options: compact page with enable toggle/header, shortcut row, auto-run controls, release/version section, and popup preview.
+- Shortcut key boxes/buttons in options use the same green as selected auto-run day squares.
 - Options also includes `Execução Automática`: off-by-default `Auto Run RA>BI`, local 24-hour time displayed as `16:00h`, and day buttons `D S T Q Q S S` defaulting to Monday-Friday.
 - Shortcut row: Chrome activation shortcut opens Chrome's shortcut page and refreshes the displayed key boxes after editing.
-- Version: scaffolded but hidden until a remote/release source exists.
+- Version: visible options section. It checks GitHub Releases for `LorenzoBerto-Eduzz/RaBiTool`, compares with the installed manifest version, and downloads `RaBiTool.zip` when a newer release asset exists.
 - Support: placeholders only; configure later.
 
 ## Current Workflow Alignment
@@ -87,6 +88,7 @@ After the owner tests the guarded Planilha flow, continue with refinement of the
 - Commit message convention: start commit titles with the current extension version without brackets, for example `0.1.0 - Commit title`.
 - Version rule: do not bump/change `project/manifest.json` version, docs version references, commit version prefix, tags, or releases unless the owner explicitly asks for a version change.
 - Release direction: only when owner asks for `remoterelease`, package/upload the zipped local release artifact to GitHub Releases. Use the current manifest version for the release tag/title/description and upload `RaBiTool.zip`. Do not create or edit GitHub Releases without an explicit release instruction.
+- Existing first release: `v0.1.0`. Next versions and next remote releases should be created only on explicit owner request.
 - Support placeholders: later.
 
 ## Details Still Needed
@@ -94,7 +96,7 @@ After the owner tests the guarded Planilha flow, continue with refinement of the
 - Whether to implement append-only fallback when the oldest incoming report ID is not found.
 - Whether to add post-paste validation beyond the current anchor guard.
 - Whether to narrow permissions from discovery-wide host access to only HugMe/Excel hosts.
-- Exact GitHub remote/release naming, tag/version rules, release asset naming, and config-page version-check/download behavior.
+- Whether to adjust the version section to allow downloading the same/current version manually.
 
 ## Owner Commands
 

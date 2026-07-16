@@ -149,8 +149,8 @@ function normalizeExcelIdValue(value) {
   return text.replace(/\s+/g, '');
 }
 
-const EXCEL_FIND_ATTEMPT_WAITS_MS = [500, 1000, 1500, 2000, 2500, 3000];
-const EXCEL_SELECTED_CELL_VERIFY_WAITS_MS = [250, 500, 750, 1000, 1500, 2000];
+const EXCEL_FIND_ATTEMPT_WAITS_MS = [700, 1200, 1800, 2400, 3000, 3800];
+const EXCEL_SELECTED_CELL_VERIFY_WAITS_MS = [350, 700, 1100, 1600, 2300, 3200];
 
 function excelFindShortcutSpec(key) {
   const normalized = String(key || 'f').toLowerCase() === 'l' ? 'l' : 'f';
@@ -214,8 +214,8 @@ async function verifySelectedExcelId(target, id, stage = 'excel-find-anchor') {
     const waitMs = EXCEL_SELECTED_CELL_VERIFY_WAITS_MS[attempt - 1];
     await delay(waitMs);
     const selected = await copySelectedExcelText(target, `${stage}-verify`, {
-      attempts: 1,
-      baseWaitMs: Math.min(800, 300 + waitMs)
+      attempts: 3,
+      baseWaitMs: Math.min(1200, 350 + waitMs)
     });
 
     if (!selected.ok) {
@@ -499,6 +499,33 @@ async function focusExcelWorkbookSurface(target, options = {}) {
   }
   await delay(650);
   return focused;
+}
+
+async function submitExcelFindSearchWithDebugger(target, id, stage, attempt, waitMs) {
+  const enterGapMs = Math.min(260, 120 + (attempt * 25));
+  for (let index = 0; index < 2; index += 1) {
+    const sent = await dispatchDebuggerKey(target, 'Enter', 'Enter', 13, { holdMs: 70 });
+    if (!sent.ok) {
+      return {
+        ok: false,
+        stage,
+        reason: `Enter ${index + 1} para executar a busca do ID ${id} falhou: ${sent.reason}`
+      };
+    }
+    await delay(enterGapMs);
+  }
+  await delay(Math.max(450, waitMs));
+  return { ok: true, stage, submitted: true, submitCount: 2 };
+}
+
+async function closeExcelFindAndSettleOnSelection(target, stage, waitMs) {
+  await releaseExcelPointerAndModifiers(target);
+  const sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27, { holdMs: 55 });
+  if (!sent.ok) {
+    return { ok: false, stage, reason: `Escape para fechar a busca falhou: ${sent.reason}` };
+  }
+  await delay(Math.max(650, Math.min(1800, waitMs + 300)));
+  return { ok: true, stage };
 }
 
 async function releaseExcelPointerAndModifiers(target, point = null) {
@@ -918,7 +945,7 @@ async function findExcelIdWithSearch(target, id, stage = 'excel-find-anchor') {
       continue;
     }
 
-    const filled = await fillExcelFindDialog(target, id, stage, 2);
+    const filled = await fillExcelFindDialog(target, id, stage, false);
     if (!filled?.ok) {
       lastReason = `Tentativa ${attempt}: ${filled?.reason || 'Não consegui focar/preencher o campo de busca do Excel.'}`;
       await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
@@ -932,15 +959,23 @@ async function findExcelIdWithSearch(target, id, stage = 'excel-find-anchor') {
       continue;
     }
 
-    await delay(waitMs);
-    const sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
-    if (!sent.ok) return { ok: false, stage, reason: `Escape para fechar a busca falhou: ${sent.reason}` };
-    await delay(450);
+    const submitted = await submitExcelFindSearchWithDebugger(target, id, stage, attempt, waitMs);
+    if (!submitted.ok) {
+      lastReason = `Tentativa ${attempt}: ${submitted.reason || 'Não consegui executar a busca do Excel.'}`;
+      await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+      await delay(250);
+      continue;
+    }
+
+    const closed = await closeExcelFindAndSettleOnSelection(target, stage, waitMs);
+    if (!closed.ok) return closed;
 
     const selected = await verifySelectedExcelId(target, id, stage);
     if (!selected.ok) {
       lastCopiedText = selected.copiedText || lastCopiedText;
       lastReason = `Tentativa ${attempt}: ${selected.reason || 'Não consegui confirmar a célula selecionada.'}`;
+      await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+      await delay(250);
       continue;
     }
 

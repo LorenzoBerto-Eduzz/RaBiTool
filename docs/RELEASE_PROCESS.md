@@ -36,6 +36,8 @@ Owner command: `remoterelease`.
 
 Only run this when the owner explicitly asks for it.
 
+Current released version: `v0.1.0`.
+
 Rules:
 
 1. Use the current `project/manifest.json` version unless the owner explicitly asks to bump it first. Never change the manifest/code/docs version automatically.

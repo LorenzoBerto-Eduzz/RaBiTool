@@ -40,6 +40,7 @@ The project should be developed as a reliable business-data workflow, not as a l
 - Excel import modules now include XLSX parser/validation, active worksheet guard, keyboard/debugger anchor verification, clipboard TSV preparation, and one-block paste through Excel Web when guards pass.
 - Downloads, offscreen clipboard, tabs, tab groups, scripting, debugger, and commands are available for the prototype.
 - Optional scheduled auto-run uses Chrome alarms, with an off-by-default config section for local time and active weekdays.
+- Options page includes a release/version section that checks GitHub Releases for the latest `RaBiTool.zip` asset and compares it with the running manifest version.
 - Activation and `RA > BI` use RaBiTool-owned reserved HugMe/Planilha tabs. Current-load group/tab IDs are reused; arbitrary pre-existing tabs or stale groups named `RaBiTool` are ignored.
 - Disabling/toggling off RaBiTool is now a hard session shutdown: it cancels any active RA > BI workflow, closes the tracked HugMe and Planilha tabs, clears workspace tracking, and sets the extension disabled.
 - User-facing extension text should be PT-BR with correct accents in popup, options page, manifest description, workflow statuses, and blocking/error messages.
@@ -67,7 +68,7 @@ The project should be developed as a reliable business-data workflow, not as a l
 - Keep one contiguous Excel paste as the write action whenever possible so Excel Web undo remains simple.
 - Treat Excel Web UI automation as focused-tab automation. Guard Excel Find by proving the Find dialog, searched ID, and selected anchor cell before pasting.
 - After validation guards pass, optimize for quick/automatic execution.
-- Next planned project direction is using the GitHub remote/release flow and later adding a config-page version/download section.
+- Next planned project direction is using the GitHub remote/release flow, smoke testing releases on colleague machines, and refining Excel Web edge cases.
 
 ## Owner Workflow Commands
 
