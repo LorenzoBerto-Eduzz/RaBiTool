@@ -306,7 +306,9 @@
         row.className = 'csh-status-item';
         row.dataset.level = item.level || 'info';
         row.dataset.code = item.code || '';
-        row.title = 'Clique para copiar o log';
+        row.title = item.extensionOverlayPrimaryId
+          ? 'Clique para abrir a extensão interferente'
+          : 'Clique para copiar o log';
         const icon = document.createElement('span');
         icon.className = 'csh-status-icon';
         icon.textContent = noticeIcon(item.level);
@@ -314,6 +316,13 @@
         text.className = 'csh-status-text';
         text.textContent = String(item.text || '').trim();
         row.addEventListener('click', async () => {
+          if (item.extensionOverlayPrimaryId) {
+            const opened = await sendMessage({
+              action: 'OPEN_EXTENSION_DETAILS',
+              extensionId: item.extensionOverlayPrimaryId
+            });
+            if (opened?.ok) return;
+          }
           const copied = await copyLogText(item.text, item.code, item);
           if (!copied) return;
           row.dataset.copied = 'true';
@@ -360,7 +369,9 @@
       .map((item) => ({
         level: 'warn',
         stage: `workspace-${String(item.kind || item.label || 'tab').toLowerCase()}`,
-        text: `${item.label}: ${item.reason}`
+        text: `${item.label}: ${item.reason}`,
+        extensionOverlayPrimaryId: item.extensionOverlayPrimaryId || '',
+        extensionOverlayIds: item.extensionOverlayIds || []
       }));
   }
 

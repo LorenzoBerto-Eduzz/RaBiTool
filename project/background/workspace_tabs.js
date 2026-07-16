@@ -327,10 +327,22 @@ function inspectWorkspacePage(kind) {
   const blocked = /access denied|permission|permissao|permissão|sem permiss|acesso negado|solicitar acesso|request access/.test(text);
   const login = /login|signin|senha|entrar|microsoft/.test(text) && /login|signin|oauth|auth/.test(url);
   const excelLikeDom = !!document.querySelector('[aria-label*="Excel"], [data-automation-id*="Grid"], [role="grid"], canvas');
+  const extensionOverlayIds = Array.from(document.querySelectorAll('iframe, frame, embed, object')).filter((element) => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0 &&
+      rect.width > 0 && rect.height > 0;
+  }).map((element) => {
+    const source = String(element.getAttribute('src') || element.getAttribute('data') || '').trim().toLowerCase();
+    return source.match(/^chrome-extension:\/\/([^/]+)/)?.[1] || '';
+  }).filter(Boolean).filter((id, index, list) => list.indexOf(id) === index);
+  const extensionOverlayCount = extensionOverlayIds.length;
   return {
     ok: true,
     login,
     blocked,
+    extensionOverlayCount,
+    extensionOverlayIds,
     title: document.title,
     textHit: text.includes('relatório de tickets') || text.includes('relatorio de tickets') ||
       text.includes('excel') || excelLikeDom
@@ -405,6 +417,29 @@ async function inspectWorkspaceTabStatus(kind, tab, wasTracked = false) {
   }
   if (kind === 'bi' && (inspection.login || inspection.blocked)) {
     return { kind, label: def.label, state: 'error', tabId: tab.id, reason: inspection.blocked ? 'Planilha sem permissão/acesso.' : 'Planilha pediu login.' };
+  }
+
+  if (kind === 'bi' && inspection.extensionOverlayCount > 0) {
+    const ids = (inspection.extensionOverlayIds || []).filter(Boolean);
+    const idText = ids.length ? ` ${ids[0].slice(0, 8)}...` : '';
+    return {
+      kind,
+      label: def.label,
+      state: 'error',
+      tabId: tab.id,
+      extensionOverlayIds: ids,
+      extensionOverlayPrimaryId: ids[0] || '',
+      reason: `Extensão interfere na Planilha${idText}. Clique para abrir e desativar.`
+    };
+    return {
+      kind,
+      label: def.label,
+      state: 'error',
+      tabId: tab.id,
+      extensionOverlayIds: ids,
+      extensionOverlayPrimaryId: ids[0] || '',
+      reason: `Planilha com overlay de outra extensão ativo (${inspection.extensionOverlayCount}).${idText} Clique neste aviso para abrir a página da extensão e pause/desative antes de rodar RA > BI.`
+    };
   }
 
   if (kind === 'bi' && isWorkspaceTargetUrl(kind, url)) {

@@ -23,6 +23,26 @@ function openSideTab(url, openerTab, callback) {
   });
 }
 
+function openFocusedSideTab(url, openerTab, callback) {
+  const safeUrl = String(url || '').trim();
+  if (!safeUrl) return callback?.({ ok: false, reason: 'URL não informada.' });
+  const props = { url: safeUrl, active: true };
+  if (Number.isInteger(openerTab?.id)) props.openerTabId = openerTab.id;
+  if (Number.isInteger(openerTab?.index)) props.index = openerTab.index + 1;
+  chrome.tabs.create(props, (tab) => {
+    if (chrome.runtime.lastError || !tab) return callback?.({ ok: false, reason: 'Não consegui abrir a aba solicitada.' });
+    callback?.({ ok: true, tabId: tab.id });
+  });
+}
+
+function openExtensionDetails(extensionId, openerTab, callback) {
+  const id = String(extensionId || '').trim();
+  if (!/^[a-p]{32}$/.test(id)) {
+    return callback?.({ ok: false, reason: 'ID da extensão interferente inválido.' });
+  }
+  openFocusedSideTab(`chrome://extensions/?id=${id}`, openerTab, callback);
+}
+
 function sendToTab(tabId, message, callback) {
   if (!Number.isInteger(tabId)) return callback?.({ ok: false, reason: 'Aba não informada.' });
   chrome.tabs.sendMessage(tabId, message, (response) => {
@@ -122,6 +142,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.action === 'OPEN_SIDE_TAB') {
     openSideTab(message.url, sender.tab, sendResponse);
+    return true;
+  }
+
+  if (message?.action === 'OPEN_EXTENSION_DETAILS') {
+    openExtensionDetails(message.extensionId, sender.tab, sendResponse);
     return true;
   }
 

@@ -501,6 +501,50 @@ async function focusExcelWorkbookSurface(target, options = {}) {
   return focused;
 }
 
+async function releaseExcelPointerAndModifiers(target, point = null) {
+  const releases = [
+    { key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, modifiers: 0 },
+    { key: 'Shift', code: 'ShiftLeft', windowsVirtualKeyCode: 16, modifiers: 0 },
+    { key: 'Alt', code: 'AltLeft', windowsVirtualKeyCode: 18, modifiers: 0 }
+  ];
+  for (const item of releases) {
+    await debuggerSendCommand(target, 'Input.dispatchKeyEvent', {
+      ...item,
+      nativeVirtualKeyCode: item.windowsVirtualKeyCode,
+      type: 'keyUp'
+    });
+    await delay(25);
+  }
+
+  if (point?.x != null && point?.y != null) {
+    await debuggerSendCommand(target, 'Input.dispatchMouseEvent', {
+      type: 'mouseReleased',
+      x: Math.max(1, Math.round(point.x)),
+      y: Math.max(1, Math.round(point.y)),
+      button: 'left',
+      clickCount: 1
+    });
+    await delay(120);
+  }
+
+  return { ok: true };
+}
+
+async function stabilizeExcelBeforeFind(target, pointIndex = 0) {
+  await releaseExcelPointerAndModifiers(target);
+  await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+  await delay(120);
+  await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+  await delay(160);
+
+  const focus = await focusExcelWorkbookSurface(target, { pointIndex });
+  if (!focus.ok) return focus;
+  await releaseExcelPointerAndModifiers(target, { x: focus.x, y: focus.y });
+  await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
+  await delay(180);
+  return { ...focus, stabilized: true };
+}
+
 function dispatchExcelFindShortcutInPage(keyName = 'f') {
   const key = String(keyName || 'f').toLowerCase() === 'l' ? 'l' : 'f';
   const upper = key.toUpperCase();
@@ -803,7 +847,7 @@ async function tryOpenExcelFindDialog(target, stage, waitMs, attempt) {
   for (let variantIndex = 0; variantIndex < variants.length; variantIndex += 1) {
     const variant = variants[variantIndex];
     const pointIndex = ((attempt - 1) * variants.length) + variantIndex;
-    const focus = await focusExcelWorkbookSurface(target, { pointIndex });
+    const focus = await stabilizeExcelBeforeFind(target, pointIndex);
     lastFocus = focus;
     if (!focus.ok) {
       lastReason = `${variant.name}: ${focus.reason || 'não consegui focar a área da Planilha'}`;
@@ -919,6 +963,92 @@ async function findExcelMotherSheetTabForSettings(settings) {
   return tabs.find((tab) => isExcelMotherSheetTab(tab, settings)) || null;
 }
 
+function isBrowserInternalOrExtensionUrl(url) {
+  return /^(chrome|chrome-extension|edge|about):/i.test(String(url || '').trim());
+}
+
+function inspectForeignExtensionFramesInPage(currentExtensionId) {
+  const ownPrefix = `chrome-extension://${currentExtensionId}/`;
+  const detected = [];
+  const candidates = Array.from(document.querySelectorAll('iframe, frame, embed, object')).filter((element) => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0 &&
+      rect.width > 0 && rect.height > 0;
+  });
+  candidates.forEach((element) => {
+    const source = String(element.getAttribute('src') || element.getAttribute('data') || '').trim();
+    if (!source.toLowerCase().startsWith('chrome-extension://')) return;
+    if (source.startsWith(ownPrefix)) return;
+    const rect = element.getBoundingClientRect?.();
+    detected.push({
+      tag: element.tagName,
+      source,
+      rect: rect ? `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)}x${Math.round(rect.height)}` : ''
+    });
+  });
+  return {
+    ok: true,
+    stage: 'excel-extension-overlays',
+    overlayCount: detected.length,
+    overlays: detected.slice(0, 8)
+  };
+}
+
+async function inspectForeignExtensionFramesFromExcelTab(tabId) {
+  const result = await runFunctionInTab(tabId, inspectForeignExtensionFramesInPage, [chrome.runtime.id]);
+  return result?.ok ? result : {
+    ok: false,
+    stage: 'excel-extension-overlays',
+    overlayCount: 0,
+    reason: result?.reason || 'Não consegui verificar overlays de outras extensões na Planilha.'
+  };
+}
+
+async function retargetExistingExcelTab(previousTab, settings) {
+  const targetUrl = String(settings?.excelWorkbookUrl || '').trim();
+  if (!targetUrl) {
+    return {
+      ok: false,
+      stage: 'excel-tab',
+      reason: 'URL da Planilha Mãe não configurada para recolocar a aba Excel.'
+    };
+  }
+
+  if (!Number.isInteger(previousTab?.id)) {
+    return {
+      ok: false,
+      stage: 'excel-tab',
+      reason: 'A aba rastreada da Planilha não está disponível para recolocar.'
+    };
+  }
+
+  await focusWindow(previousTab.windowId);
+  await activateTab(previousTab.id);
+  const retargeted = await updateTab(previousTab.id, { url: targetUrl, active: true });
+  if (!retargeted) {
+    return {
+      ok: false,
+      stage: 'excel-tab',
+      reason: 'Não consegui recolocar a aba rastreada da Planilha na URL do Excel Web.'
+    };
+  }
+
+  await waitForTabComplete(previousTab.id, 30000);
+  const liveRetargeted = await getTab(previousTab.id) || retargeted;
+  const retargetedTracked = await getWorkspaceTabs();
+  retargetedTracked.bi = {
+    ...(retargetedTracked.bi || {}),
+    tabId: liveRetargeted.id,
+    url: liveRetargeted.url || targetUrl,
+    status: liveRetargeted.status || 'loading',
+    reservedForRaBiTool: true,
+    retargetedAt: new Date().toISOString()
+  };
+  await setWorkspaceTabs(retargetedTracked);
+  return { ok: true, tab: liveRetargeted };
+}
+
 async function ensureExcelTabOnTarget(excelTab, settings, attempts = 3) {
   const targetUrl = String(settings?.excelWorkbookUrl || '').trim();
   let lastTab = excelTab || null;
@@ -931,6 +1061,12 @@ async function ensureExcelTabOnTarget(excelTab, settings, attempts = 3) {
         stage: 'excel-tab',
         reason: 'A aba rastreada da Planilha foi fechada antes da colagem.'
       };
+    }
+
+    if (isBrowserInternalOrExtensionUrl(lastTab.url)) {
+      const replacement = await retargetExistingExcelTab(lastTab, settings);
+      if (!replacement.ok) return replacement;
+      lastTab = replacement.tab;
     }
 
     await focusWindow(lastTab.windowId);
@@ -946,7 +1082,7 @@ async function ensureExcelTabOnTarget(excelTab, settings, attempts = 3) {
       await updateTab(lastTab.id, { url: targetUrl });
       await waitForTabComplete(lastTab.id, 10000);
     }
-    await delay(1000);
+    await delay(attempt <= attempts ? 1000 : 1500);
   }
 
   const finalTab = lastTab?.id ? await getTab(lastTab.id) : lastTab;
@@ -966,6 +1102,15 @@ async function attachDebuggerToExcelTab(excelTab, settings, attempts = 3) {
     if (!prepared.ok) return prepared;
     lastTab = prepared.tab;
 
+    const overlayInspection = await inspectForeignExtensionFramesFromExcelTab(lastTab.id);
+    if (overlayInspection.overlayCount > 0) {
+      return {
+        ok: false,
+        stage: 'excel-extension-overlays',
+        reason: `Detectei ${overlayInspection.overlayCount} overlay(s) de outra extensão na Planilha. Não vou remover nem alterar elementos de outra extensão; pause/desative a extensão interferente para rodar RA > BI com segurança.`
+      };
+    }
+
     const target = { tabId: lastTab.id };
     const attached = await debuggerAttach(target);
     if (attached.ok) {
@@ -974,6 +1119,22 @@ async function attachDebuggerToExcelTab(excelTab, settings, attempts = 3) {
 
     lastReason = attached.reason || 'motivo não informado';
     const lower = lastReason.toLowerCase();
+    const currentAfterFailure = await getTab(lastTab.id) || lastTab;
+    if (isBrowserInternalOrExtensionUrl(currentAfterFailure.url)) {
+      const replacement = await retargetExistingExcelTab(currentAfterFailure, settings);
+      if (!replacement.ok) return replacement;
+      lastTab = replacement.tab;
+      lastReason = `${lastReason}. A aba rastreada estava em ${currentAfterFailure.url || 'URL interna/extensão'}; recoloquei essa mesma aba na Planilha.`;
+      await delay(1000);
+      continue;
+    }
+    if (lower.includes('chrome-extension://')) {
+      return {
+        ok: false,
+        stage: 'excel-debugger',
+        reason: `O Chrome bloqueou o debugger por conflito com página/extensão interna, mas a aba rastreada ainda está na Planilha (${currentAfterFailure.url || 'URL indisponível'}). Não vou alterar elementos de outra extensão. Verifique se alguma extensão, como JAM, está ativa sobre a Planilha antes de rodar RA > BI.`
+      };
+    }
     const anotherDebugger = lower.includes('another debugger') || lower.includes('debugger is already attached');
     if (anotherDebugger) {
       return {
@@ -983,7 +1144,7 @@ async function attachDebuggerToExcelTab(excelTab, settings, attempts = 3) {
       };
     }
 
-    await delay(1000);
+    await delay(attempt <= attempts ? 1000 : 1500);
   }
 
   return {
@@ -1068,6 +1229,8 @@ async function applyExcelWorkbookUpdateViaKeyboard(excelTab, report, plan = null
     let sent = await dispatchDebuggerKey(target, 'Escape', 'Escape', 27);
     if (!sent.ok) return { ok: false, stage: 'excel-keyboard', reason: `Escape via debugger falhou: ${sent.reason}` };
     await delay(150);
+    const stabilized = await stabilizeExcelBeforeFind(target, 0);
+    if (!stabilized.ok) return stabilized;
     cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
     if (cancelled) return cancelled;
 

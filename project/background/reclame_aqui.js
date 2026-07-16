@@ -47,6 +47,8 @@ function isRaExportTab(tab) {
 
 function isExcelMotherSheetTab(tab, settings) {
   const url = String(tab?.url || '');
+  const normalized = url.toLowerCase();
+  if (/^(chrome|chrome-extension|edge|about):/.test(normalized)) return false;
   const configuredUrl = String(settings?.excelWorkbookUrl || '').trim();
   if (configuredUrl && url.startsWith(configuredUrl)) return true;
   return EXCEL_HOST_HINTS.some((hint) => url.includes(hint));
