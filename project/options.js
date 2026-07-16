@@ -3,7 +3,10 @@
 const SETTINGS_KEY = 'rabiToolSettings';
 const WORKFLOW_STATUS_KEY = 'rabiToolWorkflowStatus';
 const OPTIONS_POPUP_POS_KEY = 'rabiToolOptionsPopupPositionTopRightV2';
+const LATEST_RELEASE_CACHE_KEY = 'rabiToolLatestReleaseInfoCache';
+const EXTENSIONS_PAGE_URL = 'chrome://extensions';
 const SHORTCUTS_PAGE_URL = 'chrome://extensions/shortcuts';
+const RELEASE_REPO_SLUGS = ['LorenzoBerto-Eduzz/RaBiTool'];
 const DEFAULT_SETTINGS = {
   enabled: false,
   toolName: 'RaBiTool',
@@ -40,6 +43,10 @@ const autorunCardEl = document.getElementById('autorun-card');
 const autorunEnabledEl = document.getElementById('autorun-enabled');
 const autorunTimeEl = document.getElementById('autorun-time');
 const autorunDaysEl = document.getElementById('autorun-days');
+const versionCurrentEl = document.getElementById('version-current');
+const versionLatestEl = document.getElementById('version-latest');
+const downloadUpdateBtn = document.getElementById('btn-download-update');
+const refreshExtensionLink = document.getElementById('link-refresh-extension');
 let optionsPopup = null;
 let optionsPopupAnchoredTopRight = false;
 let shortcutRefreshTimer = null;
@@ -50,10 +57,30 @@ let lastOptionsWorkspaceStatus = null;
 let lastOptionsWorkspaceRenderSignature = '';
 let lastOptionsRenderedNoticesSignature = '';
 let lastOptionsProgressSignature = '';
+let latestReleaseInfo = null;
 let optionsSettings = withDefaultSettings();
 let loadingAutorun = false;
 
+const CHECK_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
+const DOWNLOAD_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>';
+const SEARCH_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>';
 const SHORTCUT_WARNING_ICON_HTML = '<span class="sc-add-warning" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L1 21h22L12 3zm1 13h-2v-5h2v5zm0 3h-2v-2h2v2z"/></svg></span>';
+
+function setUpdateButtonState({ text, disabled, icon }) {
+  if (!downloadUpdateBtn) return;
+  const iconMarkup = icon === 'download' ? DOWNLOAD_ICON : icon === 'search' ? SEARCH_ICON : CHECK_ICON;
+  downloadUpdateBtn.innerHTML = `${iconMarkup}<span>${text}</span>`;
+  downloadUpdateBtn.disabled = !!disabled;
+}
+
+function safeSetLocal(data) {
+  try {
+    if (!chrome?.storage?.local?.set) return;
+    chrome.storage.local.set(data, () => {
+      void chrome.runtime?.lastError;
+    });
+  } catch (_) {}
+}
 
 function withDefaultSettings(raw = {}) {
   return {
@@ -537,6 +564,171 @@ async function focusOptionsWorkspaceTab(kind) {
   if (!response?.ok) setOptionsPopupStatus(response?.reason || `Não consegui abrir a aba ${label}.`, 'error');
 }
 
+function normalizeVersion(version) {
+  return String(version || '').trim().replace(/^v/i, '');
+}
+
+function compareVersions(a, b) {
+  const aParts = normalizeVersion(a).split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const bParts = normalizeVersion(b).split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(aParts.length, bParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const diff = (aParts[index] || 0) - (bParts[index] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+
+  return 0;
+}
+
+function findZipAsset(assets) {
+  if (!Array.isArray(assets)) return null;
+
+  const exact = assets.find((asset) => String(asset.name || '').toLowerCase() === 'rabitool.zip');
+  if (exact) return exact;
+
+  const namedZip = assets.find((asset) => {
+    const name = String(asset.name || '').toLowerCase();
+    return name.includes('rabitool') && name.endsWith('.zip');
+  });
+  if (namedZip) return namedZip;
+
+  return assets.find((asset) => String(asset.name || '').toLowerCase().endsWith('.zip')) || null;
+}
+
+function parseReleasePayload(payload) {
+  const zipAsset = findZipAsset(payload?.assets);
+  return {
+    version: normalizeVersion(payload?.tag_name),
+    assetUrl: zipAsset ? zipAsset.browser_download_url : '',
+    assetName: zipAsset ? zipAsset.name : 'RaBiTool.zip',
+    releasePageUrl: payload?.html_url || 'https://github.com/LorenzoBerto-Eduzz/RaBiTool/releases'
+  };
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = 4500) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: 'application/vnd.github+json' },
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Falha ao verificar release (${response.status})`);
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function fetchLatestReleaseFromRepo(repoSlug) {
+  try {
+    const latestPayload = await fetchJsonWithTimeout(`https://api.github.com/repos/${repoSlug}/releases/latest`);
+    return parseReleasePayload(latestPayload);
+  } catch (latestError) {
+    const listPayload = await fetchJsonWithTimeout(`https://api.github.com/repos/${repoSlug}/releases?per_page=1`);
+    const release = Array.isArray(listPayload) ? listPayload[0] : null;
+    if (!release) throw latestError;
+    return parseReleasePayload(release);
+  }
+}
+
+async function fetchLatestRelease() {
+  return Promise.any(RELEASE_REPO_SLUGS.map((repoSlug) => fetchLatestReleaseFromRepo(repoSlug)));
+}
+
+function getLocalValue(key) {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(key, (data) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(data?.[key] || null);
+      });
+    } catch (_) {
+      resolve(null);
+    }
+  });
+}
+
+async function loadCachedLatestRelease() {
+  const cached = await getLocalValue(LATEST_RELEASE_CACHE_KEY);
+  if (!cached?.version) return null;
+  return cached;
+}
+
+function rememberLatestRelease(info) {
+  if (!info?.version) return;
+  safeSetLocal({ [LATEST_RELEASE_CACHE_KEY]: { ...info, cachedAt: Date.now() } });
+}
+
+function applyVersionState(currentVersion, releaseInfo, { fromCache = false } = {}) {
+  latestReleaseInfo = releaseInfo;
+  if (versionLatestEl) versionLatestEl.textContent = releaseInfo.version || 'Indisponível';
+
+  if (!releaseInfo.version) {
+    setUpdateButtonState({ text: 'Não foi possível verificar versões', disabled: true, icon: 'search' });
+    return;
+  }
+
+  const versionComparison = compareVersions(currentVersion, releaseInfo.version);
+  if (versionComparison === 0) {
+    setUpdateButtonState({ text: fromCache ? 'Confirmando versão...' : 'Versão mais recente em uso', disabled: true, icon: 'check' });
+    return;
+  }
+
+  if (!releaseInfo.assetUrl) {
+    setUpdateButtonState({ text: 'Versão encontrada sem pacote', disabled: true, icon: 'search' });
+    return;
+  }
+
+  setUpdateButtonState({
+    text: fromCache ? 'Verificando versão mais recente' : 'Baixar versão mais recente no GitHub',
+    disabled: !!fromCache,
+    icon: fromCache ? 'search' : 'download'
+  });
+}
+
+async function checkVersionAndUpdateState() {
+  if (!versionCurrentEl || !versionLatestEl || !downloadUpdateBtn) return;
+  const currentVersion = normalizeVersion(chrome.runtime.getManifest().version);
+  versionCurrentEl.textContent = currentVersion;
+  versionLatestEl.textContent = 'Verificando...';
+  setUpdateButtonState({ text: 'Pesquisando versões', disabled: true, icon: 'search' });
+
+  const cachedRelease = await loadCachedLatestRelease();
+  if (cachedRelease?.version) {
+    applyVersionState(currentVersion, cachedRelease, { fromCache: true });
+  }
+
+  try {
+    const releaseInfo = await fetchLatestRelease();
+    rememberLatestRelease(releaseInfo);
+    applyVersionState(currentVersion, releaseInfo);
+  } catch (error) {
+    console.error('Version check failed:', error);
+    if (latestReleaseInfo?.version) {
+      applyVersionState(currentVersion, latestReleaseInfo);
+      return;
+    }
+    versionLatestEl.textContent = 'Indisponível';
+    setUpdateButtonState({ text: 'Não foi possível verificar versões', disabled: true, icon: 'search' });
+  }
+}
+
+function closeOptionsTab() {
+  chrome.tabs.getCurrent((tab) => {
+    if (tab && typeof tab.id === 'number') {
+      chrome.tabs.remove(tab.id);
+      return;
+    }
+    window.close();
+  });
+}
+
 function renderOptionsWorkflowStatus(status) {
   lastOptionsWorkflowStatus = status || null;
   if (!optionsPopup) return;
@@ -622,6 +814,37 @@ shortcutListEl?.addEventListener('click', (event) => {
   openShortcutSettings();
 });
 
+refreshExtensionLink?.addEventListener('click', (event) => {
+  event.preventDefault();
+  chrome.tabs.create({ url: EXTENSIONS_PAGE_URL });
+});
+
+downloadUpdateBtn?.addEventListener('click', () => {
+  if (!latestReleaseInfo?.assetUrl) return;
+
+  setUpdateButtonState({ text: 'Baixando versão mais recente...', disabled: true, icon: 'download' });
+  chrome.downloads.download(
+    {
+      url: latestReleaseInfo.assetUrl,
+      filename: latestReleaseInfo.assetName || 'RaBiTool.zip',
+      saveAs: false,
+      conflictAction: 'uniquify'
+    },
+    (downloadId) => {
+      if (chrome.runtime.lastError || !downloadId) {
+        console.error('Download failed:', chrome.runtime.lastError);
+        setUpdateButtonState({ text: 'Baixar versão mais recente no GitHub', disabled: false, icon: 'download' });
+        return;
+      }
+
+      chrome.downloads.show(downloadId);
+      chrome.tabs.create({ url: EXTENSIONS_PAGE_URL });
+      setUpdateButtonState({ text: 'Baixar versão mais recente no GitHub', disabled: false, icon: 'download' });
+      closeOptionsTab();
+    }
+  );
+});
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.enabled) {
@@ -648,5 +871,6 @@ setInterval(() => {
 
 loadEnabled();
 loadShortcut();
+checkVersionAndUpdateState();
 startOptionsWorkspaceRefresh();
 refreshOptionsWorkflowStatus();
