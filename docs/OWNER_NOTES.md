@@ -14,12 +14,12 @@ RaBiTool is the Chrome extension project for automating a Reclame Aqui export in
 
 - Popup: compact white top-right surface with drag, gear, close, outline `HugMe`/`Planilha` tracked-tab buttons, `RA > BI`, loading/current-process line, and stacked warning/result notices.
 - HugMe/Planilha buttons use green/check for ready, blue/spinner for checking, and red/X for blocked/login/permisson states.
-- Options: compact page with enable toggle/header, shortcut row, auto-run controls, release/version section, and popup preview.
+- Options: compact page with enable toggle/header, shortcut row, auto-run controls, release/version section, support section, and popup preview.
 - Shortcut key boxes/buttons in options use the same green as selected auto-run day squares.
 - Options also includes `Execução Automática`: off-by-default `Auto Run RA>BI`, local 24-hour time displayed as `16:00h`, and day buttons `D S T Q Q S S` defaulting to Monday-Friday.
 - Shortcut row: Chrome activation shortcut opens Chrome's shortcut page and refreshes the displayed key boxes after editing.
 - Version: visible options section. It checks GitHub Releases for `LorenzoBerto-Eduzz/RaBiTool`, compares with the installed manifest version, and downloads `RaBiTool.zip` when a newer release asset exists.
-- Support: placeholders only; configure later.
+- Support: visible options section with GitHub `https://github.com/LorenzoBerto-Eduzz/RaBiTool` and email `lorenzo.berto@eduzz.com`.
 
 ## Current Workflow Alignment
 
@@ -85,11 +85,10 @@ After the owner tests the guarded Planilha flow, continue with refinement of the
 - `git config core.hooksPath` must be `.githooks`.
 - Initial branch: `main`.
 - Remote: `origin -> https://github.com/LorenzoBerto-Eduzz/RaBiTool.git`.
-- Commit message convention: start commit titles with the current extension version without brackets, for example `0.1.0 - Commit title`.
+- Commit message convention: start commit titles with the current extension version without brackets, for example `1.0.0 - Commit title`.
 - Version rule: do not bump/change `project/manifest.json` version, docs version references, commit version prefix, tags, or releases unless the owner explicitly asks for a version change.
 - Release direction: only when owner asks for `remoterelease`, package/upload the zipped local release artifact to GitHub Releases. Use the current manifest version for the release tag/title/description and upload `RaBiTool.zip`. Do not create or edit GitHub Releases without an explicit release instruction.
-- Existing first release: `v0.1.0`. Next versions and next remote releases should be created only on explicit owner request.
-- Support placeholders: later.
+- Existing first release: `v0.1.0`. Current requested release target is `v1.0.0`; future versions and future remote releases should be created only on explicit owner request.
 
 ## Details Still Needed
 

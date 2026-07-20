@@ -6,7 +6,7 @@
 - Project kind: Chrome Manifest V3 extension
 - Source folder: `project/`
 - Stack: plain JavaScript, HTML, CSS, Chrome extension APIs
-- Current manifest version: `0.1.0`
+- Current manifest version: `1.0.0`
 
 ## Purpose
 
@@ -41,6 +41,7 @@ The project should be developed as a reliable business-data workflow, not as a l
 - Downloads, offscreen clipboard, tabs, tab groups, scripting, debugger, and commands are available for the prototype.
 - Optional scheduled auto-run uses Chrome alarms, with an off-by-default config section for local time and active weekdays.
 - Options page includes a release/version section that checks GitHub Releases for the latest `RaBiTool.zip` asset and compares it with the running manifest version.
+- Options page includes a support section with the RaBiTool GitHub repository and owner email.
 - Activation and `RA > BI` use RaBiTool-owned reserved HugMe/Planilha tabs. Current-load group/tab IDs are reused; arbitrary pre-existing tabs or stale groups named `RaBiTool` are ignored.
 - Disabling/toggling off RaBiTool is now a hard session shutdown: it cancels any active RA > BI workflow, closes the tracked HugMe and Planilha tabs, clears workspace tracking, and sets the extension disabled.
 - User-facing extension text should be PT-BR with correct accents in popup, options page, manifest description, workflow statuses, and blocking/error messages.

@@ -8,7 +8,7 @@ This file is the portable continuity note for AI coding sessions working on RaBi
 - Project kind: Chrome Manifest V3 extension.
 - Source folder: `project/`.
 - Manifest: `project/manifest.json`.
-- Current version: `0.1.0`.
+- Current version: `1.0.0`.
 - Stack: plain JavaScript, HTML, CSS, Chrome extension APIs.
 - Build step: none.
 - Load unpacked from `project/`.
@@ -16,8 +16,8 @@ This file is the portable continuity note for AI coding sessions working on RaBi
 - Initial branch is `main`.
 - First project baseline commit has been created locally.
 - GitHub remote is `origin -> https://github.com/LorenzoBerto-Eduzz/RaBiTool.git`.
-- First GitHub Release `v0.1.0` exists with `RaBiTool.zip`. Future version bumps and future `remoterelease` runs must happen only when the owner explicitly asks.
-- Support placeholders remain intentionally unconfigured for now.
+- GitHub Release `v0.1.0` exists, and the current requested release target is `v1.0.0` with `RaBiTool.zip`.
+- Support section is configured on the options page with the RaBiTool GitHub repository and owner email.
 - Allowed Git email for this project: `lorenzo.berto@eduzz.com`.
 - Git identity guard is enabled locally with `.git-identity`, `git config user.email`, and `git config core.hooksPath .githooks`.
 
@@ -97,7 +97,7 @@ The private sample workbook previously inspected placed the mother-sheet snippet
 - Workspace tabs listen continuously with Chrome tab update/remove events. If a tracked tab enters login/auth, the tool marks it blocked; after auth resolves to a non-target page, it automatically navigates the same tracked tab back to the required HugMe export URL or Planilha workbook URL.
 - Chrome internal pages such as the default new tab / `chrome://newtab` cannot receive injected content-script UI, so the floating popup cannot appear on that page. Activation from there can still prepare the reserved workspace tabs; the popup appears once a supported web page or tracked workspace tab is focused.
 - If reserved tabs are missing at `RA > BI` time, the action recreates and assigns them before proceeding. If reserved tabs cannot be prepared or required page elements do not load after bounded waits, stop with a clear stage/element error such as `Abas reservadas do HugMe e Planilha Mae nao preparadas`.
-- Options page currently keeps the enable toggle/header, Chrome shortcut row, auto-run controls, release/version section, and popup preview. The version section checks GitHub Releases for `LorenzoBerto-Eduzz/RaBiTool`, compares the latest release tag with the running manifest version, looks for `RaBiTool.zip`, and offers a download button only when a newer package is available. The options-page popup preview also wires the `RA > BI` button to the real runtime action so missing-tab and workflow errors are visible there too. Extra support sections remain removed for simplicity.
+- Options page currently keeps the enable toggle/header, Chrome shortcut row, auto-run controls, release/version section, support section, and popup preview. The version section checks GitHub Releases for `LorenzoBerto-Eduzz/RaBiTool`, compares the latest release tag with the running manifest version, looks for `RaBiTool.zip`, and offers a download button only when a newer package is available. The support section links to `https://github.com/LorenzoBerto-Eduzz/RaBiTool` and lists `lorenzo.berto@eduzz.com`. The options-page popup preview also wires the `RA > BI` button to the real runtime action so missing-tab and workflow errors are visible there too.
 - User-facing UI and status text should be in PT-BR with proper accents/punctuation. This includes the options page, popup controls/tooltips, manifest description, release README, workflow active-text lines, and blocking/error notices.
 - Default popup placement is top-right. The popup remains draggable and saves deliberate dragged positions under the current top-right position key. Resize/zoom should not save new positions.
 - Toolbar click and Chrome activation shortcut toggle shared `enabled` storage.
@@ -167,6 +167,6 @@ Before any project commit:
 ## Owner Workflow Commands
 
 - `memcheck`: update durable project docs/meta memory only.
-- `gitcheck`: perform `memcheck`, inspect and check the repo, verify Git identity guard when present, then stage, commit, and push if a remote is configured unless the owner says not to. Commit titles should start with the current extension version without brackets, for example `0.1.0 - Commit title`. Do not bump/change the extension version unless the owner explicitly asks for a version change.
+- `gitcheck`: perform `memcheck`, inspect and check the repo, verify Git identity guard when present, then stage, commit, and push if a remote is configured unless the owner says not to. Commit titles should start with the current extension version without brackets, for example `1.0.0 - Commit title`. Do not bump/change the extension version unless the owner explicitly asks for a version change.
 - `localrelease`: refresh the generated local release folder from `project/` using `scripts/Export-LocalRelease.ps1`. Do not create a zip unless explicitly requested.
 - `remoterelease`: only when explicitly requested, create the zipped local release artifact and publish/upload it to GitHub Releases for the current extension version. Use the version name for the release tag/title/description and upload `RaBiTool.zip`. Do not create or edit GitHub Releases unless the owner explicitly asks for `remoterelease` or gives a direct release instruction.

@@ -62,6 +62,8 @@ The tracked-tab buttons are outline-only: green/check means ready, blue/spinner 
 
 Every visible notice/log row is clickable and has a deterministic debug code generated from severity, stage, and message text. The code is not shown in the popup UI. Clicking a notice copies only the readable message plus `Código: ...`, keeping colleague reports compact while still giving Codex a precise tag to identify the failing stage.
 
+The options page includes a final `Suporte` section with the RaBiTool GitHub repository and owner email, styled in the same green/light-green options theme.
+
 ## Workspace Tabs
 
 RaBiTool owns a reserved pair of HugMe/Planilha tabs. On activation and on `RA > BI`, it prepares the assigned tabs. It reuses only the tab IDs and Chrome group ID recorded by RaBiTool for the current extension load marker; it does not scan arbitrary existing tabs or trust an old group merely because it is named `RaBiTool`.

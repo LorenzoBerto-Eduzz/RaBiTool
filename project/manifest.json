@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RaBiTool",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Extensão para trazer relatório do HugMe para a planilha mãe do BI.",
   "permissions": ["storage", "tabs", "tabGroups", "scripting", "commands", "downloads", "alarms", "offscreen", "clipboardWrite", "clipboardRead", "debugger"],
   "host_permissions": ["<all_urls>"],
