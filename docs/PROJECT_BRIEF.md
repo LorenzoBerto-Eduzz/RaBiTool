@@ -6,7 +6,7 @@
 - Project kind: Chrome Manifest V3 extension
 - Source folder: `project/`
 - Stack: plain JavaScript, HTML, CSS, Chrome extension APIs
-- Current manifest version: `1.0.0`
+- Current manifest version: `1.0.1`
 
 ## Purpose
 

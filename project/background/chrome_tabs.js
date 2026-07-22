@@ -66,26 +66,54 @@ function waitForTabComplete(tabId, timeoutMs = 12000) {
   });
 }
 
-function runFunctionInTab(tabId, func, args = []) {
+function runFunctionInTab(tabId, func, args = [], options = {}) {
   return new Promise((resolve) => {
+    const timeoutMs = Math.max(1000, Number(options.timeoutMs || 10000));
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+    const timeout = setTimeout(() => {
+      finish({ ok: false, reason: `A aba não respondeu em ${Math.round(timeoutMs / 1000)}s.` });
+    }, timeoutMs);
+
     chrome.scripting.executeScript({ target: { tabId }, func, args }, (results) => {
       if (chrome.runtime.lastError) {
-        resolve({ ok: false, reason: chrome.runtime.lastError.message || 'Não consegui acessar a aba.' });
+        finish({ ok: false, reason: chrome.runtime.lastError.message || 'Não consegui acessar a aba.' });
         return;
       }
-      resolve(results?.[0]?.result || { ok: false, reason: 'A aba não retornou resultado.' });
+      finish(results?.[0]?.result || { ok: false, reason: 'A aba não retornou resultado.' });
     });
   });
 }
 
-function runFunctionInTabFrames(tabId, func, args = []) {
+function runFunctionInTabFrames(tabId, func, args = [], options = {}) {
   return new Promise((resolve) => {
+    const timeoutMs = Math.max(1000, Number(options.timeoutMs || 10000));
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+    const timeout = setTimeout(() => {
+      finish({
+        ok: false,
+        timedOut: true,
+        reason: `O Excel/Chrome não respondeu à inspeção de frames em ${Math.round(timeoutMs / 1000)}s.`
+      });
+    }, timeoutMs);
+
     chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func, args }, (results) => {
       if (chrome.runtime.lastError) {
-        resolve({ ok: false, reason: chrome.runtime.lastError.message || 'Não consegui acessar os frames da aba.' });
+        finish({ ok: false, reason: chrome.runtime.lastError.message || 'Não consegui acessar os frames da aba.' });
         return;
       }
-      resolve({
+      finish({
         ok: true,
         results: (results || []).map((item) => ({
           frameId: item.frameId,

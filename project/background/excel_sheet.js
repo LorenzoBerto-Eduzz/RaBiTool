@@ -89,7 +89,7 @@ function inspectActiveExcelWorksheetInPage(expectedName) {
   };
 }
 
-async function verifyExcelWorksheetReady(excelTabId, settings) {
+async function verifyExcelWorksheetReadyLegacy(excelTabId, settings) {
   const expectedName = getExpectedExcelWorksheetName(settings);
   const inspected = await runFunctionInTabFrames(excelTabId, inspectActiveExcelWorksheetInPage, [expectedName]);
   if (!inspected?.ok) {
@@ -121,6 +121,61 @@ async function verifyExcelWorksheetReady(excelTabId, settings) {
     ok: false,
     stage: 'excel-worksheet',
     reason: `A aba ativa do Excel Web não foi confirmada como "${expectedName}". Aba ativa detectada: "${activeName}".${suffix} Não vou colar fora da aba correta.`
+  };
+}
+
+async function verifyExcelWorksheetReady(excelTabId, settings) {
+  const expectedName = getExpectedExcelWorksheetName(settings);
+  const attempts = 4;
+  let lastReason = '';
+  let lastEvidence = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    await setRaBiWorkflowStatus({
+      running: true,
+      activeText: `Confirmando aba Relatório de Tickets... (${attempt}/${attempts})`
+    });
+
+    const inspected = await runFunctionInTabFrames(
+      excelTabId,
+      inspectActiveExcelWorksheetInPage,
+      [expectedName],
+      { timeoutMs: 7000 }
+    );
+
+    if (!inspected?.ok) {
+      lastReason = inspected?.reason || `Não consegui verificar se a aba ativa do Excel é "${expectedName}".`;
+    } else {
+      const results = (inspected.results || [])
+        .map((item) => ({ frameId: item.frameId, ...(item.result || {}) }))
+        .filter((item) => item?.ok);
+      const match = results.find((item) => item.activeMatches);
+      if (match) {
+        return {
+          ok: true,
+          stage: 'excel-worksheet',
+          worksheetName: match.activeName || expectedName,
+          frameId: match.frameId,
+          attempts: attempt
+        };
+      }
+
+      lastEvidence = results.find((item) => item.activeName || item.detectedTabs?.length) || null;
+      const activeName = lastEvidence?.activeName || 'indetectável';
+      const seenTabs = (lastEvidence?.detectedTabs || []).join(', ');
+      const suffix = seenTabs ? ` Guias detectadas: ${seenTabs}.` : '';
+      lastReason = `A aba ativa do Excel Web não foi confirmada como "${expectedName}". Aba ativa detectada: "${activeName}".${suffix}`;
+    }
+
+    if (attempt < attempts) {
+      await delay(750 + attempt * 500);
+    }
+  }
+
+  return {
+    ok: false,
+    stage: 'excel-worksheet',
+    reason: `Não consegui confirmar a aba "${expectedName}" após ${attempts} tentativas. Último retorno: ${lastReason || 'Excel Web não retornou informação da aba ativa.'} Não vou colar fora da aba correta.`
   };
 }
 

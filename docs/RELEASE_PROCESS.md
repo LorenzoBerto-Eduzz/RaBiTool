@@ -36,7 +36,7 @@ Owner command: `remoterelease`.
 
 Only run this when the owner explicitly asks for it.
 
-Current release target: `v1.0.0`.
+Current release target: `v1.0.1`.
 
 Rules:
 
