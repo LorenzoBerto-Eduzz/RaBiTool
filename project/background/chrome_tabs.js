@@ -69,12 +69,14 @@ function waitForTabComplete(tabId, timeoutMs = 12000) {
 function runFunctionInTab(tabId, func, args = [], options = {}) {
   return new Promise((resolve) => {
     const timeoutMs = Math.max(1000, Number(options.timeoutMs || 10000));
+    const stage = String(options.stage || '').trim();
+    const withStage = (result) => stage && result && !result.stage ? { ...result, stage } : result;
     let settled = false;
     const finish = (result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      resolve(result);
+      resolve(withStage(result));
     };
     const timeout = setTimeout(() => {
       finish({ ok: false, reason: `A aba não respondeu em ${Math.round(timeoutMs / 1000)}s.` });
@@ -93,12 +95,14 @@ function runFunctionInTab(tabId, func, args = [], options = {}) {
 function runFunctionInTabFrames(tabId, func, args = [], options = {}) {
   return new Promise((resolve) => {
     const timeoutMs = Math.max(1000, Number(options.timeoutMs || 10000));
+    const stage = String(options.stage || '').trim();
+    const withStage = (result) => stage && result && !result.stage ? { ...result, stage } : result;
     let settled = false;
     const finish = (result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      resolve(result);
+      resolve(withStage(result));
     };
     const timeout = setTimeout(() => {
       finish({

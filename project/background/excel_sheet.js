@@ -89,6 +89,121 @@ function inspectActiveExcelWorksheetInPage(expectedName) {
   };
 }
 
+function selectExpectedExcelWorksheetInPage(expectedName) {
+  function normalize(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  function visible(element) {
+    if (!element) return false;
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0 &&
+      rect.width > 0 && rect.height > 0;
+  }
+
+  function textFor(element) {
+    if (!element) return '';
+    const titleNode = element.querySelector?.('[sheet-title]');
+    const textNode = element.querySelector?.('.tab-active-text, .dark, .tab-anchor-text');
+    return [
+      element.getAttribute?.('aria-label'),
+      element.getAttribute?.('title'),
+      element.getAttribute?.('sheet-title'),
+      titleNode?.getAttribute?.('sheet-title'),
+      textNode?.textContent,
+      element.textContent
+    ].map((value) => String(value || '').trim()).find(Boolean) || '';
+  }
+
+  function active(element) {
+    const nodes = [
+      element,
+      element.closest?.('[role="tab"]'),
+      element.closest?.('li'),
+      element.closest?.('[aria-selected]')
+    ].filter(Boolean);
+    return nodes.some((node) => {
+      const className = String(node.className || '');
+      return node.getAttribute?.('aria-selected') === 'true' ||
+        className.includes('tab-active') ||
+        className.includes('is-selected');
+    });
+  }
+
+  function clickLikeUser(element) {
+    const rect = element.getBoundingClientRect();
+    const x = Math.max(1, Math.round(rect.left + rect.width / 2));
+    const y = Math.max(1, Math.round(rect.top + rect.height / 2));
+    element.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+    element.focus?.({ preventScroll: true });
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((type) => {
+      element.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: x,
+        clientY: y
+      }));
+    });
+    element.click?.();
+  }
+
+  const expected = normalize(expectedName);
+  const bar = document.getElementById('m_excelWebRenderer_ewaCtl_m_sheetTabBar') || document;
+  const selectors = [
+    '[role="tab"]',
+    '[sheet-title]',
+    '.tab-anchor-text',
+    '[aria-label]',
+    '[title]'
+  ];
+  const candidates = selectors
+    .flatMap((selector) => Array.from(bar.querySelectorAll(selector)))
+    .filter((element, index, list) => list.indexOf(element) === index)
+    .filter(visible)
+    .map((element) => ({
+      element,
+      clickable: element.closest?.('[role="tab"], button, [tabindex], li') || element,
+      name: textFor(element)
+    }))
+    .filter((item) => normalize(item.name) === expected);
+
+  if (!candidates.length) {
+    return {
+      ok: false,
+      stage: 'excel-worksheet',
+      selected: false,
+      reason: `A guia "${expectedName}" não ficou visível para seleção.`
+    };
+  }
+
+  const current = candidates.find((item) => active(item.element) || active(item.clickable));
+  if (current) {
+    return {
+      ok: true,
+      stage: 'excel-worksheet',
+      selected: false,
+      activeMatches: true,
+      worksheetName: current.name || expectedName
+    };
+  }
+
+  const target = candidates[0];
+  clickLikeUser(target.clickable || target.element);
+  return {
+    ok: true,
+    stage: 'excel-worksheet',
+    selected: true,
+    worksheetName: target.name || expectedName
+  };
+}
+
 async function verifyExcelWorksheetReadyLegacy(excelTabId, settings) {
   const expectedName = getExpectedExcelWorksheetName(settings);
   const inspected = await runFunctionInTabFrames(excelTabId, inspectActiveExcelWorksheetInPage, [expectedName]);
@@ -129,6 +244,7 @@ async function verifyExcelWorksheetReady(excelTabId, settings) {
   const attempts = 4;
   let lastReason = '';
   let lastEvidence = null;
+  let triedSelection = false;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     await setRaBiWorkflowStatus({
@@ -140,7 +256,7 @@ async function verifyExcelWorksheetReady(excelTabId, settings) {
       excelTabId,
       inspectActiveExcelWorksheetInPage,
       [expectedName],
-      { timeoutMs: 7000 }
+      { timeoutMs: 7000, stage: 'excel-worksheet' }
     );
 
     if (!inspected?.ok) {
@@ -165,6 +281,81 @@ async function verifyExcelWorksheetReady(excelTabId, settings) {
       const seenTabs = (lastEvidence?.detectedTabs || []).join(', ');
       const suffix = seenTabs ? ` Guias detectadas: ${seenTabs}.` : '';
       lastReason = `A aba ativa do Excel Web não foi confirmada como "${expectedName}". Aba ativa detectada: "${activeName}".${suffix}`;
+    }
+
+    if (attempt < attempts) {
+      await delay(750 + attempt * 500);
+    }
+  }
+
+  return {
+    ok: false,
+    stage: 'excel-worksheet',
+    reason: `Não consegui confirmar a aba "${expectedName}" após ${attempts} tentativas. Último retorno: ${lastReason || 'Excel Web não retornou informação da aba ativa.'} Não vou colar fora da aba correta.`
+  };
+}
+
+async function verifyExcelWorksheetReady(excelTabId, settings) {
+  const expectedName = getExpectedExcelWorksheetName(settings);
+  const attempts = 4;
+  let lastReason = '';
+  let lastEvidence = null;
+  let triedSelection = false;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    await setRaBiWorkflowStatus({
+      running: true,
+      activeText: `Confirmando aba Relatório de Tickets... (${attempt}/${attempts})`
+    });
+
+    const inspected = await runFunctionInTabFrames(
+      excelTabId,
+      inspectActiveExcelWorksheetInPage,
+      [expectedName],
+      { timeoutMs: 7000, stage: 'excel-worksheet' }
+    );
+
+    if (!inspected?.ok) {
+      lastReason = inspected?.reason || `Não consegui verificar se a aba ativa do Excel é "${expectedName}".`;
+    } else {
+      const results = (inspected.results || [])
+        .map((item) => ({ frameId: item.frameId, ...(item.result || {}) }))
+        .filter((item) => item?.ok);
+      const match = results.find((item) => item.activeMatches);
+      if (match) {
+        return {
+          ok: true,
+          stage: 'excel-worksheet',
+          worksheetName: match.activeName || expectedName,
+          frameId: match.frameId,
+          attempts: attempt
+        };
+      }
+
+      lastEvidence = results.find((item) => item.activeName || item.detectedTabs?.length) || null;
+      const activeName = lastEvidence?.activeName || 'indetectável';
+      const seenTabs = (lastEvidence?.detectedTabs || []).join(', ');
+      const suffix = seenTabs ? ` Guias detectadas: ${seenTabs}.` : '';
+      lastReason = `A aba ativa do Excel Web não foi confirmada como "${expectedName}". Aba ativa detectada: "${activeName}".${suffix}`;
+
+      if (results.some((item) => item.expectedVisible) && !triedSelection) {
+        triedSelection = true;
+        await setRaBiWorkflowStatus({
+          running: true,
+          activeText: 'Selecionando aba Relatório de Tickets...'
+        });
+        const selected = await runFunctionInTabFrames(
+          excelTabId,
+          selectExpectedExcelWorksheetInPage,
+          [expectedName],
+          { timeoutMs: 7000, stage: 'excel-worksheet' }
+        );
+        if (!selected?.ok) {
+          lastReason = selected?.reason || `A guia "${expectedName}" apareceu, mas não consegui selecioná-la.`;
+        }
+        await delay(1200);
+        continue;
+      }
     }
 
     if (attempt < attempts) {

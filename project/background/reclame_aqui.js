@@ -569,7 +569,7 @@ async function prepareReclameAquiExport() {
     orderLabel: 'Data Reclamação',
     orderTypeLabel: 'ascendente',
     waitMs: 15000
-  }]);
+  }], { timeoutMs: 25000, stage: 'ra-form' });
 
   if (!setup.ok) return setup;
   cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
@@ -581,7 +581,7 @@ async function prepareReclameAquiExport() {
     titleToken,
     pollingMs: Math.min(pollingMs, 1000),
     timeoutMs: processingTimeoutMs
-  }]);
+  }], { timeoutMs: processingTimeoutMs + 15000, stage: 'ra-processing' });
   if (!clicked.ok) return clicked;
   cancelled = getRaBiWorkflowCancellationResult('workflow-cancel');
   if (cancelled) return cancelled;
